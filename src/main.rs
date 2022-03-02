@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ggez::event::{self, MouseButton};
 use ggez::graphics::{self, Color};
@@ -23,6 +23,7 @@ struct PlayerProperties {
     pub jump_force: f32,
     pub jump_gravity: f32,
     pub coyote_time: Duration,
+    pub jump_buffer_time: Duration,
 }
 
 impl Default for PlayerProperties {
@@ -37,9 +38,10 @@ impl Default for PlayerProperties {
             air_direction_change_acceleration: 50. + 20.,
             gravity: 100.,
             terminal_speed: 45.,
-            jump_force: 5.,
-            jump_gravity: 2.,
+            jump_force: 23.,
+            jump_gravity: 57.,
             coyote_time: Duration::from_millis(83),
+            jump_buffer_time: Duration::from_millis(25),
         }
     }
 }
@@ -52,6 +54,8 @@ struct Player {
 
     grounded: bool,
     hugging_wall: bool,
+    pressed_jump: bool,
+    jump_pressed_time: Instant,
 }
 
 impl Player {
@@ -63,6 +67,8 @@ impl Player {
             image: graphics::Image::solid(ctx, 1, graphics::Color::WHITE)?,
             grounded: false,
             hugging_wall: false,
+            pressed_jump: false,
+            jump_pressed_time: Instant::now()
         })
     }
 
@@ -74,11 +80,23 @@ impl Player {
         } else {
             0.
         };
+        if Instant::now() > self.jump_pressed_time + self.properties.jump_buffer_time {
+            self.pressed_jump = false;
+        }
+        let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
+        if pressing_jump {
+            self.pressed_jump = true;
+            self.jump_pressed_time = Instant::now();
+        }
 
         let delta = timer::delta(ctx).as_secs_f32();
 
         // Apply gravity
-        self.velocity.y += self.properties.gravity * delta;
+        self.velocity.y += if pressing_jump {
+            self.properties.jump_gravity
+        } else {
+            self.properties.gravity
+        } * delta;
         if f32::abs(self.velocity.y) > self.properties.terminal_speed {
             self.velocity.y = self.properties.terminal_speed * self.velocity.y.signum();
         }
@@ -121,6 +139,11 @@ impl Player {
             if f32::abs(self.velocity.x) > self.properties.max_run_speed {
                 self.velocity.x = self.properties.max_run_speed * self.velocity.x.signum();
             }
+        }
+
+        if self.grounded && self.pressed_jump {
+            self.pressed_jump = false;
+            self.velocity.y = -self.properties.jump_force;
         }
 
         self.reset_frame_state();
@@ -409,6 +432,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
                         .text("Ground acceleration"),
                 );
+                ui.add(
+                    egui::Slider::new(&mut prop.jump_force, 1f32..=100.)
+                        .text("Jump Force"),
+                );
             });
             ui.collapsing("Airborne properties", |ui| {
                 ui.add(
@@ -424,6 +451,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         .text("Air direction change acceleration"),
                 );
                 ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=100.).text("Gravity"));
+                ui.add(egui::Slider::new(&mut prop.jump_gravity, 0f32..=100.).text("Jump Gravity"));
                 ui.add(
                     egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.).text("Terminal speed"),
                 );
