@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use ggez::*;
+use ggez_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
 
 use crate::{Level, LevelTile};
@@ -30,7 +31,7 @@ impl Default for PlayerProperties {
             ground_direction_change_acceleration: 85. + 40.,
             air_acceleration: 50.,
             air_decceleration: 20.,
-            air_direction_change_acceleration: 50. + 20.,
+            air_direction_change_acceleration: 100.,
             gravity: 100.,
             terminal_speed: 45.,
             jump_force: 22.,
@@ -38,6 +39,70 @@ impl Default for PlayerProperties {
             coyote_time: Duration::from_millis(100),
             jump_buffer_time: Duration::from_millis(150),
         }
+    }
+}
+
+impl PlayerProperties {
+    pub fn show_ui(&mut self, egui_ctx: &egui::CtxRef) {
+        egui::Window::new("Property editor")
+            .anchor(egui::Align2::RIGHT_BOTTOM, (0., 0.))
+            .show(egui_ctx, |ui| {
+                ui.add(
+                    egui::Slider::new(&mut self.max_run_speed, 0f32..=100.).text("Max run speed"),
+                );
+                egui::CollapsingHeader::new("Grounded properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.ground_decceleration, 0f32..=100.)
+                                .text("Ground decceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.ground_acceleration, 0f32..=100.)
+                                .text("Ground acceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.ground_direction_change_acceleration, 0f32..=200.)
+                                .text("Ground direction change acceleration"),
+                        );
+                    });
+                egui::CollapsingHeader::new("Airborne properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.air_acceleration, 0f32..=100.)
+                                .text("Air acceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.air_decceleration, 0f32..=100.)
+                                .text("Air decceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut self.air_direction_change_acceleration,
+                                0f32..=200.,
+                            )
+                            .text("Air direction change acceleration"),
+                        );
+                        ui.add(egui::Slider::new(&mut self.gravity, 0f32..=200.).text("Gravity"));
+
+                        ui.add(
+                            egui::Slider::new(&mut self.terminal_speed, 0f32..=100.)
+                                .text("Terminal speed"),
+                        );
+                    });
+                egui::CollapsingHeader::new("Jump properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.jump_force, 1f32..=100.).text("Jump Force"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.jump_gravity, 0f32..=100.)
+                                .text("Jump Gravity"),
+                        );
+                    });
+            });
     }
 }
 
