@@ -314,6 +314,7 @@ impl Player {
                         if self.velocity.y > 0. {
                             self.grounded = true;
                         }
+                        self.velocity = Vec2::ZERO;
                         self.hugging_wall = true;
                         return;
                     }
