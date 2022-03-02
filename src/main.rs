@@ -36,52 +36,62 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         let egui_ctx = self.egui_backend.ctx();
 
-        egui::Window::new("Property editor").show(&egui_ctx, |ui| {
-            let prop = &mut self.player.properties;
-            ui.add(egui::Slider::new(&mut prop.max_run_speed, 0f32..=100.).text("Max run speed"));
-            egui::CollapsingHeader::new("Grounded properties")
-                .default_open(true)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
-                            .text("Ground decceleration"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
-                            .text("Ground acceleration"),
-                    );
-                });
-            egui::CollapsingHeader::new("Airborne properties")
-                .default_open(true)
-                .show(ui, |ui| {
-                    ui.add(
-                        egui::Slider::new(&mut prop.air_acceleration, 0f32..=100.)
-                            .text("Air acceleration"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut prop.air_decceleration, 0f32..=100.)
-                            .text("Air decceleration"),
-                    );
-                    ui.add(
-                        egui::Slider::new(&mut prop.air_direction_change_acceleration, 0f32..=100.)
+        egui::Window::new("Property editor")
+            .anchor(egui::Align2::RIGHT_BOTTOM, (0., 0.))
+            .show(&egui_ctx, |ui| {
+                let prop = &mut self.player.properties;
+                ui.add(
+                    egui::Slider::new(&mut prop.max_run_speed, 0f32..=100.).text("Max run speed"),
+                );
+                egui::CollapsingHeader::new("Grounded properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
+                                .text("Ground decceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
+                                .text("Ground acceleration"),
+                        );
+                    });
+                egui::CollapsingHeader::new("Airborne properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut prop.air_acceleration, 0f32..=100.)
+                                .text("Air acceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut prop.air_decceleration, 0f32..=100.)
+                                .text("Air decceleration"),
+                        );
+                        ui.add(
+                            egui::Slider::new(
+                                &mut prop.air_direction_change_acceleration,
+                                0f32..=100.,
+                            )
                             .text("Air direction change acceleration"),
-                    );
-                    ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=200.).text("Gravity"));
+                        );
+                        ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=200.).text("Gravity"));
 
-                    ui.add(
-                        egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.)
-                            .text("Terminal speed"),
-                    );
-                });
-            egui::CollapsingHeader::new("Jump properties")
-                .default_open(true)
-                .show(ui, |ui| {
-                    ui.add(egui::Slider::new(&mut prop.jump_force, 1f32..=100.).text("Jump Force"));
-                    ui.add(
-                        egui::Slider::new(&mut prop.jump_gravity, 0f32..=100.).text("Jump Gravity"),
-                    );
-                });
-        });
+                        ui.add(
+                            egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.)
+                                .text("Terminal speed"),
+                        );
+                    });
+                egui::CollapsingHeader::new("Jump properties")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut prop.jump_force, 1f32..=100.).text("Jump Force"),
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut prop.jump_gravity, 0f32..=100.)
+                                .text("Jump Gravity"),
+                        );
+                    });
+            });
 
         Ok(())
     }
