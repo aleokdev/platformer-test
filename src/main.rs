@@ -28,7 +28,7 @@ impl Default for PlayerProperties {
     fn default() -> Self {
         Self {
             max_run_speed: 7.,
-            terminal_speed: 4.,
+            terminal_speed: 17.,
             ground_acceleration: 85.,
             ground_decceleration: 40.,
             ground_direction_change_acceleration: 150.,
@@ -77,6 +77,9 @@ impl Player {
 
         // Apply gravity
         self.velocity.y += self.properties.gravity * delta;
+        if f32::abs(self.velocity.y) > self.properties.terminal_speed {
+            self.velocity.y = self.properties.terminal_speed * self.velocity.y.signum();
+        }
 
         if self.grounded {
             if x_input == 0. {
