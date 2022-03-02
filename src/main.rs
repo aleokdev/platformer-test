@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use ggez::event;
+use ggez::event::{self, MouseButton};
 use ggez::graphics::{self, Color};
 use ggez::input;
 use ggez::timer;
 use ggez::{Context, GameResult};
 use glam::*;
+
+use ggez_egui::*;
 
 struct PlayerProperties {
     pub max_run_speed: f32,
@@ -25,14 +27,14 @@ struct PlayerProperties {
 impl Default for PlayerProperties {
     fn default() -> Self {
         Self {
-            max_run_speed: 6.,
+            max_run_speed: 7.,
             terminal_speed: 4.,
-            ground_acceleration: 15.,
-            ground_decceleration: 12.,
-            ground_direction_change_acceleration: 3.,
+            ground_acceleration: 85.,
+            ground_decceleration: 40.,
+            ground_direction_change_acceleration: 150.,
             air_acceleration: 0.5,
             air_decceleration: 0.2,
-            gravity: 10.,
+            gravity: 70.,
             jump_force: 5.,
             jump_gravity: 2.,
             coyote_time: Duration::from_millis(83),
@@ -63,7 +65,7 @@ impl Player {
     }
 
     pub fn update(&mut self, ctx: &Context, level: &Level) {
-        let x_input = if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::A) {
+        let x_input: f32 = if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::A) {
             -1.
         } else if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::D) {
             1.
@@ -79,18 +81,25 @@ impl Player {
         if self.grounded {
             if x_input == 0. {
                 // Apply decceleration
-                if f32::abs(self.velocity.x) > self.properties.ground_decceleration {
-                    self.velocity.x -= x_input * self.properties.ground_decceleration * delta;
+                let decceleration = self.properties.ground_decceleration * delta;
+                if f32::abs(self.velocity.x) > decceleration {
+                    self.velocity.x += if self.velocity.x > 0. {
+                        -decceleration
+                    } else {
+                        decceleration
+                    };
                 } else {
                     self.velocity.x = 0.;
                 }
             } else {
                 // Apply acceleration
-                if self.properties.max_run_speed
-                    > f32::abs(self.velocity.x) + self.properties.ground_acceleration * delta
-                {
-                    self.velocity.x += x_input * self.properties.ground_acceleration * delta;
+                let acceleration = if x_input.signum() != self.velocity.x.signum() {
+                    self.properties.ground_direction_change_acceleration * delta
                 } else {
+                    self.properties.ground_acceleration * delta
+                };
+                self.velocity.x += x_input * acceleration;
+                if f32::abs(self.velocity.x) > self.properties.max_run_speed {
                     self.velocity.x = self.properties.max_run_speed * self.velocity.x.signum();
                 }
             }
@@ -107,10 +116,18 @@ impl Player {
     }
 
     fn try_move(&mut self, mut to_move: Vec2, level: &Level) {
-        fn calculate_delta_step(delta: Vec2) -> Vec2 {
-            const STEP_LENGTH: f32 = 0.001;
+        if to_move.x == 0. && to_move.y == 0. {
+            return;
+        }
 
-            delta / delta.length() * STEP_LENGTH
+        fn calculate_delta_step(delta: Vec2) -> Vec2 {
+            const MAX_STEP_LENGTH: f32 = 0.2;
+            let delta_len = delta.length();
+            if delta_len <= MAX_STEP_LENGTH {
+                delta
+            } else {
+                delta / delta.length() * MAX_STEP_LENGTH
+            }
         }
 
         let mut step = calculate_delta_step(to_move);
@@ -205,6 +222,11 @@ impl Player {
         )?;
         Ok(())
     }
+
+    pub fn teleport_to(&mut self, pos: Vec2) {
+        self.position = pos;
+        self.velocity = vec2(0., 0.);
+    }
 }
 
 enum LevelTile {
@@ -216,7 +238,6 @@ struct Level {
     width: u32,
     height: u32,
     tile_batch: graphics::spritebatch::SpriteBatch,
-    image: graphics::Image,
     pub spawn_point: Vec2,
 }
 
@@ -225,16 +246,13 @@ impl Level {
         let mut image_path = PathBuf::from("/");
         image_path.push(&map.tilesets()[0].image.as_ref().unwrap().source);
         let image = graphics::Image::new(ctx, image_path)?;
-        let tile_batch = Self::generate_tile_batch(image.clone(), &map)?;
+        let tile_batch = Self::generate_tile_batch(image, &map)?;
         let tiles = if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
             map.get_layer(0).unwrap().layer_type()
         {
             (0..layer.height() as i32)
                 .flat_map(|y| (0..layer.width() as i32).map(move |x| (x, y)))
-                .map(|(x, y)| match layer.get_tile(x, y) {
-                    Some(_) => Some(LevelTile::Solid),
-                    None => None,
-                })
+                .map(|(x, y)| layer.get_tile(x, y).map(|_| LevelTile::Solid))
                 .collect()
         } else {
             panic!()
@@ -257,7 +275,6 @@ impl Level {
 
         Ok(Level {
             tile_batch,
-            image,
             tiles,
             width: map.width,
             height: map.height,
@@ -306,7 +323,8 @@ impl Level {
     }
 
     pub fn draw(&self, ctx: &mut Context, draw_param: graphics::DrawParam) -> GameResult {
-        graphics::draw(ctx, &self.tile_batch, draw_param)
+        graphics::draw(ctx, &self.tile_batch, draw_param)?;
+        Ok(())
     }
 }
 
@@ -336,6 +354,7 @@ fn get_tile_rect(
 struct MainState {
     level: Level,
     player: Player,
+    egui_backend: EguiBackend,
 }
 
 impl MainState {
@@ -348,6 +367,7 @@ impl MainState {
         let s = MainState {
             player: Player::new(ctx, level.spawn_point)?,
             level,
+            egui_backend: EguiBackend::default(),
         };
         Ok(s)
     }
@@ -356,6 +376,23 @@ impl MainState {
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         self.player.update(ctx, &self.level);
+
+        let egui_ctx = self.egui_backend.ctx();
+
+        egui::Window::new("Property editor").show(&egui_ctx, |ui| {
+            let prop = &mut self.player.properties;
+            ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=100.).text("Gravity"));
+            ui.add(
+                egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
+                    .text("Ground decceleration"),
+            );
+            ui.add(
+                egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
+                    .text("Ground acceleration"),
+            );
+            ui.add(egui::Slider::new(&mut prop.max_run_speed, 0f32..=100.).text("Max run speed"));
+        });
+
         Ok(())
     }
 
@@ -370,8 +407,40 @@ impl event::EventHandler<ggez::GameError> for MainState {
             &self.level,
         )?;
 
+        graphics::draw(ctx, &self.egui_backend, ([0.0, 0.0],))?;
+
         graphics::present(ctx)?;
         Ok(())
+    }
+
+    fn mouse_button_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        button: MouseButton,
+        _x: f32,
+        _y: f32,
+    ) {
+        self.egui_backend.input.mouse_button_down_event(button);
+    }
+
+    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
+        self.egui_backend.input.mouse_button_up_event(button);
+    }
+
+    fn mouse_motion_event(&mut self, _ctx: &mut Context, x: f32, y: f32, _dx: f32, _dy: f32) {
+        self.egui_backend.input.mouse_motion_event(x, y);
+    }
+
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        keycode: event::KeyCode,
+        _keymods: event::KeyMods,
+        _repeat: bool,
+    ) {
+        if keycode == event::KeyCode::R {
+            self.player.teleport_to(self.level.spawn_point);
+        }
     }
 }
 
