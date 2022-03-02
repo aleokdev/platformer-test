@@ -24,19 +24,19 @@ pub struct PlayerProperties {
 impl Default for PlayerProperties {
     fn default() -> Self {
         Self {
-            max_run_speed: 10.,
+            max_run_speed: 12.,
             ground_acceleration: 85.,
-            ground_decceleration: 40.,
+            ground_decceleration: 65.,
             ground_direction_change_acceleration: 85. + 40.,
             air_acceleration: 50.,
             air_decceleration: 20.,
             air_direction_change_acceleration: 50. + 20.,
             gravity: 100.,
             terminal_speed: 45.,
-            jump_force: 23.,
+            jump_force: 22.,
             jump_gravity: 57.,
-            coyote_time: Duration::from_millis(83),
-            jump_buffer_time: Duration::from_millis(25),
+            coyote_time: Duration::from_millis(100),
+            jump_buffer_time: Duration::from_millis(150),
         }
     }
 }
@@ -50,7 +50,9 @@ pub struct Player {
     grounded: bool,
     hugging_wall: bool,
     pressed_jump: bool,
+    can_jump: bool,
     jump_pressed_time: Instant,
+    last_grounded_time: Instant,
 }
 
 impl Player {
@@ -64,6 +66,8 @@ impl Player {
             hugging_wall: false,
             pressed_jump: false,
             jump_pressed_time: Instant::now(),
+            last_grounded_time: Instant::now(),
+            can_jump: false,
         })
     }
 
@@ -132,12 +136,18 @@ impl Player {
             }
         }
 
-        if self.grounded && self.pressed_jump {
-            self.pressed_jump = false;
-            self.velocity.y = -self.properties.jump_force;
+        if self.grounded {
+            self.can_jump = true;
+            self.last_grounded_time = Instant::now();
+        } else if Instant::now() > self.last_grounded_time + self.properties.coyote_time {
+            self.can_jump = false;
         }
 
-        self.reset_frame_state();
+        if self.can_jump && self.pressed_jump {
+            self.pressed_jump = false;
+            self.can_jump = false;
+            self.velocity.y = -self.properties.jump_force;
+        }
 
         self.try_move(self.velocity * delta, level);
     }
@@ -189,12 +199,10 @@ impl Player {
         self.velocity = vec2(0., 0.);
     }
 
-    fn reset_frame_state(&mut self) {
+    fn try_move(&mut self, mut to_move: Vec2, level: &Level) {
         self.grounded = false;
         self.hugging_wall = false;
-    }
 
-    fn try_move(&mut self, mut to_move: Vec2, level: &Level) {
         if to_move.x == 0. && to_move.y == 0. {
             return;
         }
