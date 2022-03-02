@@ -29,14 +29,14 @@ impl Default for PlayerProperties {
     fn default() -> Self {
         Self {
             max_run_speed: 7.,
-            terminal_speed: 17.,
             ground_acceleration: 85.,
             ground_decceleration: 40.,
             ground_direction_change_acceleration: 85. + 40.,
             air_acceleration: 50.,
             air_decceleration: 20.,
             air_direction_change_acceleration: 50. + 20.,
-            gravity: 70.,
+            gravity: 100.,
+            terminal_speed: 45.,
             jump_force: 5.,
             jump_gravity: 2.,
             coyote_time: Duration::from_millis(83),
