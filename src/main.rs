@@ -18,6 +18,7 @@ struct PlayerProperties {
     pub ground_direction_change_acceleration: f32,
     pub air_acceleration: f32,
     pub air_decceleration: f32,
+    pub air_direction_change_acceleration: f32,
     pub gravity: f32,
     pub jump_force: f32,
     pub jump_gravity: f32,
@@ -31,9 +32,10 @@ impl Default for PlayerProperties {
             terminal_speed: 17.,
             ground_acceleration: 85.,
             ground_decceleration: 40.,
-            ground_direction_change_acceleration: 150.,
-            air_acceleration: 0.5,
-            air_decceleration: 0.2,
+            ground_direction_change_acceleration: 85. + 40.,
+            air_acceleration: 50.,
+            air_decceleration: 20.,
+            air_direction_change_acceleration: 50. + 20.,
             gravity: 70.,
             jump_force: 5.,
             jump_gravity: 2.,
@@ -81,30 +83,43 @@ impl Player {
             self.velocity.y = self.properties.terminal_speed * self.velocity.y.signum();
         }
 
-        if self.grounded {
-            if x_input == 0. {
-                // Apply decceleration
-                let decceleration = self.properties.ground_decceleration * delta;
-                if f32::abs(self.velocity.x) > decceleration {
-                    self.velocity.x += if self.velocity.x > 0. {
-                        -decceleration
-                    } else {
-                        decceleration
-                    };
+        if x_input == 0. {
+            // Apply decceleration
+            let decceleration = if self.grounded {
+                self.properties.ground_decceleration
+            } else {
+                self.properties.air_decceleration
+            } * delta;
+
+            if f32::abs(self.velocity.x) > decceleration {
+                self.velocity.x += if self.velocity.x > 0. {
+                    -decceleration
                 } else {
-                    self.velocity.x = 0.;
+                    decceleration
+                };
+            } else {
+                self.velocity.x = 0.;
+            }
+        } else {
+            // Apply acceleration
+            let acceleration = if x_input.signum() != self.velocity.x.signum() {
+                if self.grounded {
+                    self.properties.ground_direction_change_acceleration
+                } else {
+                    self.properties.air_direction_change_acceleration
                 }
             } else {
-                // Apply acceleration
-                let acceleration = if x_input.signum() != self.velocity.x.signum() {
-                    self.properties.ground_direction_change_acceleration * delta
+                if self.grounded {
+                    self.properties.ground_acceleration
                 } else {
-                    self.properties.ground_acceleration * delta
-                };
-                self.velocity.x += x_input * acceleration;
-                if f32::abs(self.velocity.x) > self.properties.max_run_speed {
-                    self.velocity.x = self.properties.max_run_speed * self.velocity.x.signum();
+                    self.properties.air_acceleration
                 }
+            } * delta;
+
+            self.velocity.x += x_input * acceleration;
+
+            if f32::abs(self.velocity.x) > self.properties.max_run_speed {
+                self.velocity.x = self.properties.max_run_speed * self.velocity.x.signum();
             }
         }
 
@@ -124,7 +139,7 @@ impl Player {
         }
 
         fn calculate_delta_step(delta: Vec2) -> Vec2 {
-            const MAX_STEP_LENGTH: f32 = 0.2;
+            const MAX_STEP_LENGTH: f32 = 0.1;
             let delta_len = delta.length();
             if delta_len <= MAX_STEP_LENGTH {
                 delta
@@ -384,16 +399,35 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         egui::Window::new("Property editor").show(&egui_ctx, |ui| {
             let prop = &mut self.player.properties;
-            ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=100.).text("Gravity"));
-            ui.add(
-                egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
-                    .text("Ground decceleration"),
-            );
-            ui.add(
-                egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
-                    .text("Ground acceleration"),
-            );
             ui.add(egui::Slider::new(&mut prop.max_run_speed, 0f32..=100.).text("Max run speed"));
+            ui.collapsing("Grounded properties", |ui| {
+                ui.add(
+                    egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
+                        .text("Ground decceleration"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
+                        .text("Ground acceleration"),
+                );
+            });
+            ui.collapsing("Airborne properties", |ui| {
+                ui.add(
+                    egui::Slider::new(&mut prop.air_acceleration, 0f32..=100.)
+                        .text("Air acceleration"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut prop.air_decceleration, 0f32..=100.)
+                        .text("Air decceleration"),
+                );
+                ui.add(
+                    egui::Slider::new(&mut prop.air_direction_change_acceleration, 0f32..=100.)
+                        .text("Air direction change acceleration"),
+                );
+                ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=100.).text("Gravity"));
+                ui.add(
+                    egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.).text("Terminal speed"),
+                );
+            });
         });
 
         Ok(())
