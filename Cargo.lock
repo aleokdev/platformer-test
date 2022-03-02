@@ -923,8 +923,9 @@ dependencies = [
 
 [[package]]
 name = "ggez-egui"
-version = "0.1.6"
-source = "git+https://github.com/aleokdev/ggez-egui/?rev=50689dfbba13377f3fd276c624f3aaf23f9d3de2#50689dfbba13377f3fd276c624f3aaf23f9d3de2"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "273cbca7edbb6f37c86e06626534fcba9c16416a23362bf0d5687dbe9efed166"
 dependencies = [
  "egui",
  "ggez",

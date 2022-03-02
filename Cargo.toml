@@ -8,10 +8,7 @@ edition = "2021"
 [dependencies]
 ggez = "0.7.0"
 glam = "0.20.2"
-
-[dependencies.ggez-egui]
-git = "https://github.com/aleokdev/ggez-egui/"
-rev = "50689dfbba13377f3fd276c624f3aaf23f9d3de2"
+ggez-egui = "0.1.7"
 
 [dependencies.tiled]
 git = "https://github.com/mapeditor/rs-tiled"

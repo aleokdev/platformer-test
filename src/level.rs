@@ -21,31 +21,9 @@ impl Level {
         image_path.push(&map.tilesets()[0].image.as_ref().unwrap().source);
         let image = graphics::Image::new(ctx, image_path)?;
         let tile_batch = Self::generate_tile_batch(image, &map)?;
-        let tiles = if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
-            map.get_layer(0).unwrap().layer_type()
-        {
-            (0..layer.height() as i32)
-                .flat_map(|y| (0..layer.width() as i32).map(move |x| (x, y)))
-                .map(|(x, y)| layer.get_tile(x, y).map(|_| LevelTile::Solid))
-                .collect()
-        } else {
-            panic!()
-        };
+        let tiles = Self::extract_level_tiles(&map);
 
-        let spawn_point = map
-            .layers()
-            .find_map(|layer| match layer.layer_type() {
-                tiled::LayerType::ObjectLayer(layer) => Some(layer),
-                _ => None,
-            })
-            .and_then(|layer| layer.objects().nth(0))
-            .map(|obj| {
-                vec2(
-                    obj.x() / map.tile_width as f32,
-                    obj.y() / map.tile_height as f32,
-                )
-            })
-            .unwrap();
+        let spawn_point = Self::locate_spawn_point(&map).unwrap();
 
         Ok(Level {
             tile_batch,
@@ -64,6 +42,12 @@ impl Level {
         }
     }
 
+    pub fn draw(&self, ctx: &mut Context, draw_param: graphics::DrawParam) -> GameResult {
+        graphics::draw(ctx, &self.tile_batch, draw_param)
+    }
+}
+
+impl Level {
     fn generate_tile_batch(
         image: graphics::Image,
         map: &tiled::Map,
@@ -96,9 +80,33 @@ impl Level {
         Ok(batch)
     }
 
-    pub fn draw(&self, ctx: &mut Context, draw_param: graphics::DrawParam) -> GameResult {
-        graphics::draw(ctx, &self.tile_batch, draw_param)?;
-        Ok(())
+    fn extract_level_tiles(map: &tiled::Map) -> Vec<Option<LevelTile>> {
+        let tiles = if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
+            map.get_layer(0).unwrap().layer_type()
+        {
+            (0..layer.height() as i32)
+                .flat_map(|y| (0..layer.width() as i32).map(move |x| (x, y)))
+                .map(|(x, y)| layer.get_tile(x, y).map(|_| LevelTile::Solid))
+                .collect()
+        } else {
+            panic!()
+        };
+        tiles
+    }
+
+    fn locate_spawn_point(map: &tiled::Map) -> Option<Vec2> {
+        map.layers()
+            .find_map(|layer| match layer.layer_type() {
+                tiled::LayerType::ObjectLayer(layer) => Some(layer),
+                _ => None,
+            })
+            .and_then(|layer| layer.objects().nth(0))
+            .map(|obj| {
+                vec2(
+                    obj.x() / map.tile_width as f32,
+                    obj.y() / map.tile_height as f32,
+                )
+            })
     }
 }
 
@@ -117,10 +125,10 @@ fn get_tile_rect(
     let ts_img_width = ts_img_width as f32;
     let ts_img_height = ts_img_height as f32;
 
-    graphics::Rect {
-        x: x / ts_img_width,
-        y: y / ts_img_height,
-        w: tileset.tile_width as f32 / ts_img_width,
-        h: tileset.tile_height as f32 / ts_img_height,
-    }
+    let x = x / ts_img_width;
+    let y = y / ts_img_height;
+    let w = tileset.tile_width as f32 / ts_img_width;
+    let h = tileset.tile_height as f32 / ts_img_height;
+
+    graphics::Rect { x, y, w, h }
 }
