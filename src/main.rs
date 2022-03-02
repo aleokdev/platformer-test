@@ -68,7 +68,7 @@ impl Player {
             grounded: false,
             hugging_wall: false,
             pressed_jump: false,
-            jump_pressed_time: Instant::now()
+            jump_pressed_time: Instant::now(),
         })
     }
 
@@ -432,10 +432,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
                         .text("Ground acceleration"),
                 );
-                ui.add(
-                    egui::Slider::new(&mut prop.jump_force, 1f32..=100.)
-                        .text("Jump Force"),
-                );
+                ui.add(egui::Slider::new(&mut prop.jump_force, 1f32..=100.).text("Jump Force"));
             });
             ui.collapsing("Airborne properties", |ui| {
                 ui.add(
@@ -496,16 +493,30 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.egui_backend.input.mouse_motion_event(x, y);
     }
 
+    fn mouse_wheel_event(&mut self, _ctx: &mut Context, x: f32, y: f32) {
+        self.egui_backend.input.mouse_wheel_event(x, y);
+    }
+
     fn key_down_event(
         &mut self,
-        ctx: &mut Context,
+        _ctx: &mut Context,
         keycode: event::KeyCode,
-        _keymods: event::KeyMods,
+        keymods: event::KeyMods,
         _repeat: bool,
     ) {
+        self.egui_backend.input.key_down_event(keycode, keymods);
+
         if keycode == event::KeyCode::R {
             self.player.teleport_to(self.level.spawn_point);
         }
+    }
+
+    fn text_input_event(&mut self, _ctx: &mut Context, character: char) {
+        self.egui_backend.input.text_input_event(character);
+    }
+
+    fn resize_event(&mut self, _ctx: &mut Context, width: f32, height: f32) {
+        self.egui_backend.input.resize_event(width, height);
     }
 }
 
