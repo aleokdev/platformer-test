@@ -24,7 +24,7 @@ impl MainState {
         let s = MainState {
             player: Player::new(ctx, level.spawn_point)?,
             level,
-            egui_backend: EguiBackend::default(),
+            egui_backend: EguiBackend::new(ctx),
         };
         Ok(s)
     }
@@ -109,6 +109,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
 pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("super_simple", "aleok")
+        .window_setup(conf::WindowSetup::default().title("Platformer test"))
         .add_resource_path(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
     let (mut ctx, event_loop) = cb.build()?;
     let state = MainState::new(&mut ctx)?;
