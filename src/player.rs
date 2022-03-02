@@ -24,7 +24,7 @@ pub struct PlayerProperties {
 impl Default for PlayerProperties {
     fn default() -> Self {
         Self {
-            max_run_speed: 7.,
+            max_run_speed: 10.,
             ground_acceleration: 85.,
             ground_decceleration: 40.,
             ground_direction_change_acceleration: 85. + 40.,
@@ -79,15 +79,11 @@ impl Player {
             self.pressed_jump = false;
         }
         let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
-        if pressing_jump {
-            self.pressed_jump = true;
-            self.jump_pressed_time = Instant::now();
-        }
 
         let delta = timer::delta(ctx).as_secs_f32();
 
         // Apply gravity
-        self.velocity.y += if pressing_jump {
+        self.velocity.y += if pressing_jump && self.velocity.y < 0. {
             self.properties.jump_gravity
         } else {
             self.properties.gravity
@@ -175,6 +171,19 @@ impl Player {
         Ok(())
     }
 
+    pub fn key_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        keycode: event::KeyCode,
+        _keymods: event::KeyMods,
+        repeat: bool,
+    ) {
+        if keycode == event::KeyCode::Space && !repeat {
+            self.pressed_jump = true;
+            self.jump_pressed_time = Instant::now();
+        }
+    }
+
     pub fn teleport_to(&mut self, pos: Vec2) {
         self.position = pos;
         self.velocity = vec2(0., 0.);
@@ -221,13 +230,17 @@ impl Player {
                     if !self.is_colliding(level) {
                         // Not colliding when moved back on the Y axis, the player was blocked by
                         // the ground/ceiling
+                        if self.velocity.y > 0. {
+                            self.grounded = true;
+                        }
                         self.velocity.y = 0.;
-                        self.grounded = true;
                         to_move.y = 0.;
                     } else {
                         // Colliding in both axes; Stop all movement
                         self.position = last_position;
-                        self.grounded = true;
+                        if self.velocity.y > 0. {
+                            self.grounded = true;
+                        }
                         self.hugging_wall = true;
                         return;
                     }

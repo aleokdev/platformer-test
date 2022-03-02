@@ -39,36 +39,48 @@ impl event::EventHandler<ggez::GameError> for MainState {
         egui::Window::new("Property editor").show(&egui_ctx, |ui| {
             let prop = &mut self.player.properties;
             ui.add(egui::Slider::new(&mut prop.max_run_speed, 0f32..=100.).text("Max run speed"));
-            ui.collapsing("Grounded properties", |ui| {
-                ui.add(
-                    egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
-                        .text("Ground decceleration"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
-                        .text("Ground acceleration"),
-                );
-                ui.add(egui::Slider::new(&mut prop.jump_force, 1f32..=100.).text("Jump Force"));
-            });
-            ui.collapsing("Airborne properties", |ui| {
-                ui.add(
-                    egui::Slider::new(&mut prop.air_acceleration, 0f32..=100.)
-                        .text("Air acceleration"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut prop.air_decceleration, 0f32..=100.)
-                        .text("Air decceleration"),
-                );
-                ui.add(
-                    egui::Slider::new(&mut prop.air_direction_change_acceleration, 0f32..=100.)
-                        .text("Air direction change acceleration"),
-                );
-                ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=100.).text("Gravity"));
-                ui.add(egui::Slider::new(&mut prop.jump_gravity, 0f32..=100.).text("Jump Gravity"));
-                ui.add(
-                    egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.).text("Terminal speed"),
-                );
-            });
+            egui::CollapsingHeader::new("Grounded properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut prop.ground_decceleration, 0f32..=100.)
+                            .text("Ground decceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut prop.ground_acceleration, 0f32..=100.)
+                            .text("Ground acceleration"),
+                    );
+                });
+            egui::CollapsingHeader::new("Airborne properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut prop.air_acceleration, 0f32..=100.)
+                            .text("Air acceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut prop.air_decceleration, 0f32..=100.)
+                            .text("Air decceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut prop.air_direction_change_acceleration, 0f32..=100.)
+                            .text("Air direction change acceleration"),
+                    );
+                    ui.add(egui::Slider::new(&mut prop.gravity, 0f32..=200.).text("Gravity"));
+
+                    ui.add(
+                        egui::Slider::new(&mut prop.terminal_speed, 0f32..=100.)
+                            .text("Terminal speed"),
+                    );
+                });
+            egui::CollapsingHeader::new("Jump properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(egui::Slider::new(&mut prop.jump_force, 1f32..=100.).text("Jump Force"));
+                    ui.add(
+                        egui::Slider::new(&mut prop.jump_gravity, 0f32..=100.).text("Jump Gravity"),
+                    );
+                });
         });
 
         Ok(())
@@ -98,7 +110,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.egui_backend.input.mouse_button_down_event(button);
     }
 
-    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: input::mouse::MouseButton, _x: f32, _y: f32) {
+    fn mouse_button_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        button: input::mouse::MouseButton,
+        _x: f32,
+        _y: f32,
+    ) {
         self.egui_backend.input.mouse_button_up_event(button);
     }
 
@@ -112,13 +130,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
     fn key_down_event(
         &mut self,
-        _ctx: &mut Context,
+        ctx: &mut Context,
         keycode: event::KeyCode,
         keymods: event::KeyMods,
-        _repeat: bool,
+        repeat: bool,
     ) {
         self.egui_backend.input.key_down_event(keycode, keymods);
 
+        self.player.key_down_event(ctx, keycode, keymods, repeat);
         if keycode == event::KeyCode::R {
             self.player.teleport_to(self.level.spawn_point);
         }
