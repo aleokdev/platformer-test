@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ggez = "0.7.0"
 glam = "0.20.2"
 ggez-egui = "0.1.7"
+ggez = "0.7.0"
 
 [dependencies.tiled]
 git = "https://github.com/mapeditor/rs-tiled"

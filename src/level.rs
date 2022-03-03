@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use ggez::*;
 use glam::{vec2, Vec2};
@@ -11,7 +11,7 @@ pub struct Level {
     tiles: Vec<Option<LevelTile>>,
     width: u32,
     height: u32,
-    tile_batch: graphics::spritebatch::SpriteBatch,
+    tile_batch: Vec<graphics::spritebatch::SpriteBatch>,
     pub spawn_point: Vec2,
 }
 
@@ -19,8 +19,7 @@ impl Level {
     pub fn new(map: tiled::Map, ctx: &mut Context) -> GameResult<Self> {
         let mut image_path = PathBuf::from("/");
         image_path.push(&map.tilesets()[0].image.as_ref().unwrap().source);
-        let image = graphics::Image::new(ctx, image_path)?;
-        let tile_batch = Self::generate_tile_batch(image, &map)?;
+        let tile_batch = Self::generate_tile_batch(ctx, &map)?;
         let tiles = Self::extract_level_tiles(&map);
 
         let spawn_point = Self::locate_spawn_point(&map).unwrap();
@@ -43,30 +42,44 @@ impl Level {
     }
 
     pub fn draw(&self, ctx: &mut Context, draw_param: graphics::DrawParam) -> GameResult {
-        graphics::draw(ctx, &self.tile_batch, draw_param)
+        for batch in self.tile_batch.iter() {
+            graphics::draw(ctx, batch, draw_param)?;
+        }
+        Ok(())
     }
 }
 
 impl Level {
     fn generate_tile_batch(
-        image: graphics::Image,
+        ctx: &mut Context,
         map: &tiled::Map,
-    ) -> GameResult<graphics::spritebatch::SpriteBatch> {
-        let (width, height) = (image.width(), image.height());
-        let mut batch = graphics::spritebatch::SpriteBatch::new(image);
+    ) -> GameResult<Vec<graphics::spritebatch::SpriteBatch>> {
+        let mut all_batches = Vec::<graphics::spritebatch::SpriteBatch>::with_capacity(16);
         for layer in map.layers() {
+            let mut batches =
+                HashMap::<PathBuf, (graphics::spritebatch::SpriteBatch, graphics::Image)>::new(); // FIXME: Wait until SpriteBatch::image() is public
             if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) = layer.layer_type()
             {
                 for x in 0..layer.width() as i32 {
                     for y in 0..layer.height() as i32 {
                         if let Some(tile) = layer.get_tile(x, y) {
+                            let (batch, image) = batches
+                                .entry(tile.get_tileset().image.as_ref().unwrap().source.clone())
+                                .or_insert_with_key(|path| {
+                                    let mut p = PathBuf::from("/");
+                                    p.push(path);
+                                    let image = graphics::Image::new(ctx, p).unwrap();
+                                    let batch =
+                                        graphics::spritebatch::SpriteBatch::new(image.clone());
+                                    (batch, image)
+                                });
                             batch.add(
                                 graphics::DrawParam::default()
                                     .src(get_tile_rect(
                                         map.tilesets()[0].as_ref(),
                                         tile.id(),
-                                        width,
-                                        height,
+                                        image.width(),
+                                        image.height(),
                                     ))
                                     .dest(vec2(x as f32, y as f32))
                                     .scale(vec2(1. / 18., 1. / 18.)),
@@ -75,14 +88,15 @@ impl Level {
                     }
                 }
             }
+            all_batches.extend(batches.into_iter().map(|(_ts_path, (batch, _img))| batch))
         }
 
-        Ok(batch)
+        Ok(all_batches)
     }
 
     fn extract_level_tiles(map: &tiled::Map) -> Vec<Option<LevelTile>> {
-        let tiles = if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
-            map.get_layer(0).unwrap().layer_type()
+        if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
+            map.layers().find(|layer| layer.name() == "solid").unwrap().layer_type()
         {
             (0..layer.height() as i32)
                 .flat_map(|y| (0..layer.width() as i32).map(move |x| (x, y)))
@@ -90,8 +104,7 @@ impl Level {
                 .collect()
         } else {
             panic!()
-        };
-        tiles
+        }
     }
 
     fn locate_spawn_point(map: &tiled::Map) -> Option<Vec2> {
