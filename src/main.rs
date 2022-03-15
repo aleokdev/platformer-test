@@ -17,8 +17,7 @@ struct MainState {
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let level = Level::new(
-            tiled::Map::parse_file("assets/map.tmx", &mut tiled::FilesystemResourceCache::new())
-                .unwrap(),
+            tiled::Loader::new().load_tmx_map("assets/map.tmx").unwrap(),
             ctx,
         )?;
         let s = MainState {

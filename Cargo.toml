@@ -9,10 +9,7 @@ edition = "2021"
 glam = "0.20.2"
 ggez-egui = "0.1.7"
 ggez = "0.7.0"
-
-[dependencies.tiled]
-git = "https://github.com/mapeditor/rs-tiled"
-rev = "4227705a06a7251e90c27f3fe2208e8afbb6287e"
+tiled = "0.10.1"
 
 [profile.dev.package.ggez]
 opt-level = 3

@@ -95,8 +95,11 @@ impl Level {
     }
 
     fn extract_level_tiles(map: &tiled::Map) -> Vec<Option<LevelTile>> {
-        if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) =
-            map.layers().find(|layer| layer.name() == "solid").unwrap().layer_type()
+        if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) = map
+            .layers()
+            .find(|layer| layer.name == "solid")
+            .unwrap()
+            .layer_type()
         {
             (0..layer.height() as i32)
                 .flat_map(|y| (0..layer.width() as i32).map(move |x| (x, y)))
@@ -108,18 +111,15 @@ impl Level {
     }
 
     fn locate_spawn_point(map: &tiled::Map) -> Option<Vec2> {
-        map.layers()
-            .find_map(|layer| match layer.layer_type() {
-                tiled::LayerType::ObjectLayer(layer) => Some(layer),
-                _ => None,
-            })
-            .and_then(|layer| layer.objects().nth(0))
-            .map(|obj| {
+        map.layers().find_map(|layer| match layer.layer_type() {
+            tiled::LayerType::ObjectLayer(layer) => layer.objects().nth(0).map(|obj| {
                 vec2(
-                    obj.x() / map.tile_width as f32,
-                    obj.y() / map.tile_height as f32,
+                    obj.x / map.tile_width as f32,
+                    obj.y / map.tile_height as f32,
                 )
-            })
+            }),
+            _ => None,
+        })
     }
 }
 
