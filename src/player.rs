@@ -20,6 +20,7 @@ pub struct PlayerProperties {
     pub jump_gravity: f32,
     pub coyote_time: Duration,
     pub jump_buffer_time: Duration,
+    pub jumps_available: u32,
 }
 
 impl Default for PlayerProperties {
@@ -38,6 +39,7 @@ impl Default for PlayerProperties {
             jump_gravity: 57.,
             coyote_time: Duration::from_millis(100),
             jump_buffer_time: Duration::from_millis(150),
+            jumps_available: 2,
         }
     }
 }
@@ -62,8 +64,11 @@ impl PlayerProperties {
                                 .text("Ground acceleration"),
                         );
                         ui.add(
-                            egui::Slider::new(&mut self.ground_direction_change_acceleration, 0f32..=200.)
-                                .text("Ground direction change acceleration"),
+                            egui::Slider::new(
+                                &mut self.ground_direction_change_acceleration,
+                                0f32..=200.,
+                            )
+                            .text("Ground direction change acceleration"),
                         );
                     });
                 egui::CollapsingHeader::new("Airborne properties")
@@ -101,6 +106,10 @@ impl PlayerProperties {
                             egui::Slider::new(&mut self.jump_gravity, 0f32..=100.)
                                 .text("Jump Gravity"),
                         );
+                        ui.add(
+                            egui::Slider::new(&mut self.jumps_available, 0..=3)
+                                .text("Jumps Available"),
+                        )
                     });
             });
     }
@@ -118,6 +127,7 @@ pub struct Player {
     can_jump: bool,
     jump_pressed_time: Instant,
     last_grounded_time: Instant,
+    times_jumped_since_grounded: u32,
 }
 
 impl Player {
@@ -133,6 +143,7 @@ impl Player {
             jump_pressed_time: Instant::now(),
             last_grounded_time: Instant::now(),
             can_jump: false,
+            times_jumped_since_grounded: 0,
         })
     }
 
@@ -202,15 +213,30 @@ impl Player {
         }
 
         if self.grounded {
-            self.can_jump = true;
+            if self.properties.jumps_available > 0 {
+                self.can_jump = true;
+            }
+            self.times_jumped_since_grounded = 0;
             self.last_grounded_time = Instant::now();
-        } else if Instant::now() > self.last_grounded_time + self.properties.coyote_time {
-            self.can_jump = false;
+        } else if self.times_jumped_since_grounded == 0
+            && Instant::now() > self.last_grounded_time + self.properties.coyote_time
+        {
+            // If didn't jump after coyote time is over, mark it as one jump done
+            if self.properties.jumps_available == 1 {
+                self.can_jump = false;
+            } else {
+                self.times_jumped_since_grounded += 1;
+            }
         }
 
         if self.can_jump && self.pressed_jump {
             self.pressed_jump = false;
-            self.can_jump = false;
+
+            self.times_jumped_since_grounded += 1;
+            if self.properties.jumps_available <= self.times_jumped_since_grounded {
+                self.can_jump = false;
+            }
+
             self.velocity.y = -self.properties.jump_force;
         }
 
