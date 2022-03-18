@@ -22,6 +22,11 @@ pub struct PlayerProperties {
     pub jump_buffer_time: Duration,
     pub jumps_available: u32,
     pub multijump_coefficient: f32,
+    pub wallslide_max_v_speed: Option<f32>,
+    pub can_walljump: bool,
+    pub walljump_vertical_force: f32,
+    pub walljump_horizontal_force: f32,
+    pub dead_time_after_walljump: Duration,
 }
 
 impl Default for PlayerProperties {
@@ -42,6 +47,11 @@ impl Default for PlayerProperties {
             jump_buffer_time: Duration::from_millis(150),
             jumps_available: 2,
             multijump_coefficient: 0.8,
+            wallslide_max_v_speed: Some(15.),
+            can_walljump: true,
+            walljump_vertical_force: 22.,
+            walljump_horizontal_force: 10.,
+            dead_time_after_walljump: Duration::from_millis(200),
         }
     }
 }
@@ -116,9 +126,49 @@ impl PlayerProperties {
                             egui::Slider::new(&mut self.multijump_coefficient, 0f32..=1.)
                                 .text("Multijump coefficient"),
                         );
+                        let mut allow_wallsliding = self.wallslide_max_v_speed.is_some();
+                        ui.add(egui::Checkbox::new(
+                            &mut allow_wallsliding,
+                            "Allow wallsliding",
+                        ));
+                        if !allow_wallsliding {
+                            self.wallslide_max_v_speed = None;
+                        } else {
+                            let mut wallslide_max_v_speed =
+                                self.wallslide_max_v_speed.unwrap_or(15.);
+                            ui.add(
+                                egui::Slider::new(&mut wallslide_max_v_speed, 0f32..=100.)
+                                    .text("Wallslide max vertical speed"),
+                            );
+                            self.wallslide_max_v_speed = Some(wallslide_max_v_speed);
+                        }
+                        ui.add(egui::Checkbox::new(
+                            &mut self.can_walljump,
+                            "Allow walljumps",
+                        ));
+                        if self.can_walljump {
+                            ui.add(
+                                egui::Slider::new(&mut self.walljump_horizontal_force, 0f32..=100.)
+                                    .text("Walljump horizontal force"),
+                            );
+                            ui.add(
+                                egui::Slider::new(&mut self.walljump_vertical_force, 0f32..=100.)
+                                    .text("Walljump vertical force"),
+                            );
+                        }
                     });
             });
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum WallslideState {
+    /// Collided with a wall while moving on the -X direction, now the player is sliding down it.
+    HuggingLeftWall,
+    /// Collided with a wall while moving on the +X direction, now the player is sliding down it.
+    HuggingRightWall,
+    /// Not collided with any walls horizontally while moving.
+    HuggingNoWall,
 }
 
 pub struct Player {
@@ -128,11 +178,12 @@ pub struct Player {
     image: graphics::Image,
 
     grounded: bool,
-    hugging_wall: bool,
+    wallslide_state: WallslideState,
     pressed_jump: bool,
     can_jump: bool,
     jump_pressed_time: Instant,
     last_grounded_time: Instant,
+    last_walljump_time: Instant,
     times_jumped_since_grounded: u32,
 }
 
@@ -144,10 +195,11 @@ impl Player {
             properties: Default::default(),
             image: graphics::Image::solid(ctx, 1, graphics::Color::WHITE)?,
             grounded: false,
-            hugging_wall: false,
+            wallslide_state: WallslideState::HuggingNoWall,
             pressed_jump: false,
             jump_pressed_time: Instant::now(),
             last_grounded_time: Instant::now(),
+            last_walljump_time: Instant::now(),
             can_jump: false,
             times_jumped_since_grounded: 0,
         })
@@ -178,6 +230,12 @@ impl Player {
             self.velocity.y = self.properties.terminal_speed * self.velocity.y.signum();
         }
 
+        if self.wallslide_state != WallslideState::HuggingNoWall {
+            if let Some(wallslide_max_v_speed) = self.properties.wallslide_max_v_speed {
+                self.velocity.y = self.velocity.y.clamp(-f32::INFINITY, wallslide_max_v_speed);
+            }
+        }
+
         if x_input == 0. {
             // Apply decceleration
             let decceleration = if self.grounded {
@@ -195,7 +253,9 @@ impl Player {
             } else {
                 self.velocity.x = 0.;
             }
-        } else {
+        } else if Instant::now()
+            > self.last_walljump_time + self.properties.dead_time_after_walljump
+        {
             // Apply acceleration
             let acceleration = if x_input.signum() != self.velocity.x.signum() {
                 if self.grounded {
@@ -235,18 +295,32 @@ impl Player {
             }
         }
 
-        if self.can_jump && self.pressed_jump {
-            self.pressed_jump = false;
+        if self.pressed_jump {
+            if self.properties.can_walljump
+                && self.wallslide_state != WallslideState::HuggingNoWall
+                && !self.grounded
+            {
+                self.last_walljump_time = Instant::now();
 
-            self.velocity.y = -self.properties.jump_force
-                * self
-                    .properties
-                    .multijump_coefficient
-                    .powi(self.times_jumped_since_grounded as i32);
+                self.velocity.y = -self.properties.walljump_vertical_force;
+                self.velocity.x = match self.wallslide_state {
+                    WallslideState::HuggingLeftWall => self.properties.walljump_horizontal_force,
+                    WallslideState::HuggingRightWall => -self.properties.walljump_horizontal_force,
+                    WallslideState::HuggingNoWall => unreachable!(),
+                }
+            } else if self.can_jump {
+                self.pressed_jump = false;
 
-            self.times_jumped_since_grounded += 1;
-            if self.properties.jumps_available <= self.times_jumped_since_grounded {
-                self.can_jump = false;
+                self.velocity.y = -self.properties.jump_force
+                    * self
+                        .properties
+                        .multijump_coefficient
+                        .powi(self.times_jumped_since_grounded as i32);
+
+                self.times_jumped_since_grounded += 1;
+                if self.properties.jumps_available <= self.times_jumped_since_grounded {
+                    self.can_jump = false;
+                }
             }
         }
 
@@ -302,7 +376,6 @@ impl Player {
 
     fn try_move(&mut self, mut to_move: Vec2, level: &Level) {
         self.grounded = false;
-        self.hugging_wall = false;
 
         if to_move.x == 0. && to_move.y == 0. {
             return;
@@ -330,8 +403,12 @@ impl Player {
                 self.position.x = last_position.x;
                 if !self.is_colliding(level) {
                     // Not colliding when moved back on the X axis, the player was blocked by a wall
+                    self.wallslide_state = if self.velocity.x > 0. {
+                        WallslideState::HuggingRightWall
+                    } else {
+                        WallslideState::HuggingLeftWall
+                    };
                     self.velocity.x = 0.;
-                    self.hugging_wall = true;
                     to_move.x = 0.;
                 } else {
                     self.position.x += step.x;
@@ -350,8 +427,12 @@ impl Player {
                         if self.velocity.y > 0. {
                             self.grounded = true;
                         }
+                        self.wallslide_state = if self.velocity.x > 0. {
+                            WallslideState::HuggingRightWall
+                        } else {
+                            WallslideState::HuggingLeftWall
+                        };
                         self.velocity = Vec2::ZERO;
-                        self.hugging_wall = true;
                         return;
                     }
                 }
@@ -362,6 +443,16 @@ impl Player {
                     step = calculate_delta_step(to_move);
                 }
             }
+        }
+
+        match (self.wallslide_state, self.velocity.x) {
+            (WallslideState::HuggingLeftWall, vx) if vx > 0. => {
+                self.wallslide_state = WallslideState::HuggingNoWall
+            }
+            (WallslideState::HuggingRightWall, vx) if vx < 0. => {
+                self.wallslide_state = WallslideState::HuggingNoWall
+            }
+            _ => (),
         }
     }
 

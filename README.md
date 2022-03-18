@@ -16,8 +16,8 @@ May evolve into an engine at some point; This repo is going to serve as the base
 - [x] Basic player movement
 - [x] Simple AABB collision
 - [x] Multijump
-- [ ] Walljump
-- [ ] Sliding down walls
+- [x] Sliding down walls
+- [x] Walljump
 - [ ] Sticking to walls
 - [ ] Gravity switching
 
