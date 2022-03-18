@@ -21,6 +21,7 @@ pub struct PlayerProperties {
     pub coyote_time: Duration,
     pub jump_buffer_time: Duration,
     pub jumps_available: u32,
+    pub multijump_coefficient: f32,
 }
 
 impl Default for PlayerProperties {
@@ -40,6 +41,7 @@ impl Default for PlayerProperties {
             coyote_time: Duration::from_millis(100),
             jump_buffer_time: Duration::from_millis(150),
             jumps_available: 2,
+            multijump_coefficient: 0.8,
         }
     }
 }
@@ -109,7 +111,11 @@ impl PlayerProperties {
                         ui.add(
                             egui::Slider::new(&mut self.jumps_available, 0..=3)
                                 .text("Jumps Available"),
-                        )
+                        );
+                        ui.add(
+                            egui::Slider::new(&mut self.multijump_coefficient, 0f32..=1.)
+                                .text("Multijump coefficient"),
+                        );
                     });
             });
     }
@@ -232,12 +238,16 @@ impl Player {
         if self.can_jump && self.pressed_jump {
             self.pressed_jump = false;
 
+            self.velocity.y = -self.properties.jump_force
+                * self
+                    .properties
+                    .multijump_coefficient
+                    .powi(self.times_jumped_since_grounded as i32);
+
             self.times_jumped_since_grounded += 1;
             if self.properties.jumps_available <= self.times_jumped_since_grounded {
                 self.can_jump = false;
             }
-
-            self.velocity.y = -self.properties.jump_force;
         }
 
         self.try_move(self.velocity * delta, level);
