@@ -33,6 +33,6 @@ May evolve into an engine at some point; This repo is going to serve as the base
 - [ ] Basic proyectile weapons
 
 ### Extra
-- [ ] Pause menu
+- [x] Simple pause menu
 - [ ] Scripting support
 - [ ] Cutscene utils

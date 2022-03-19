@@ -1,10 +1,10 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use ggez::*;
 use ggez_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
 
-use crate::{Level, LevelTile};
+use crate::{GameInstant, Level, LevelTile};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -49,7 +49,7 @@ impl Default for PlayerProperties {
             multijump_coefficient: 0.8,
             wallslide_max_v_speed: Some(15.),
             can_walljump: true,
-            walljump_vertical_force: 22.,
+            walljump_vertical_force: 20.,
             walljump_horizontal_force: 10.,
             dead_time_after_walljump: Duration::from_millis(200),
         }
@@ -195,14 +195,14 @@ pub struct Player {
     state: State,
     pressed_jump: bool,
     can_jump: bool,
-    jump_pressed_time: Instant,
-    last_grounded_time: Instant,
-    last_walljump_time: Instant,
+    jump_pressed_time: GameInstant,
+    last_grounded_time: GameInstant,
+    last_walljump_time: GameInstant,
     times_jumped_since_grounded: u32,
 }
 
 impl Player {
-    pub fn new(ctx: &mut Context, position: Vec2) -> GameResult<Self> {
+    pub fn new(ctx: &mut Context, position: Vec2, now: GameInstant) -> GameResult<Self> {
         Ok(Self {
             position,
             velocity: vec2(0., 0.),
@@ -210,15 +210,15 @@ impl Player {
             image: graphics::Image::solid(ctx, 1, graphics::Color::WHITE)?,
             state: State::Airborne,
             pressed_jump: false,
-            jump_pressed_time: Instant::now(),
-            last_grounded_time: Instant::now(),
-            last_walljump_time: Instant::now(),
+            jump_pressed_time: now,
+            last_grounded_time: now,
+            last_walljump_time: now,
             can_jump: false,
             times_jumped_since_grounded: 0,
         })
     }
 
-    pub fn update(&mut self, ctx: &Context, level: &Level) {
+    pub fn update(&mut self, ctx: &Context, level: &Level, game_time: GameInstant) {
         // Obtain frame & input data
         let x_input: f32 = if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::A) {
             -1.
@@ -230,7 +230,7 @@ impl Player {
         let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
         let delta = timer::delta(ctx).as_secs_f32();
 
-        if Instant::now() > self.jump_pressed_time + self.properties.jump_buffer_time {
+        if game_time > self.jump_pressed_time + self.properties.jump_buffer_time {
             self.pressed_jump = false;
         }
 
@@ -268,9 +268,7 @@ impl Player {
             } else {
                 self.velocity.x = 0.;
             }
-        } else if Instant::now()
-            > self.last_walljump_time + self.properties.dead_time_after_walljump
-        {
+        } else if game_time > self.last_walljump_time + self.properties.dead_time_after_walljump {
             // Apply horizontal acceleration
             let acceleration = if x_input.signum() != self.velocity.x.signum() {
                 match self.state {
@@ -299,11 +297,11 @@ impl Player {
                     self.can_jump = true;
                 }
                 self.times_jumped_since_grounded = 0;
-                self.last_grounded_time = Instant::now();
+                self.last_grounded_time = game_time;
             }
             State::Airborne
                 if self.times_jumped_since_grounded == 0
-                    && Instant::now() > self.last_grounded_time + self.properties.coyote_time =>
+                    && game_time > self.last_grounded_time + self.properties.coyote_time =>
             {
                 // If didn't jump after coyote time is over, mark it as one jump done
                 if self.properties.jumps_available == 1 {
@@ -319,7 +317,7 @@ impl Player {
         if self.pressed_jump {
             match (self.properties.can_walljump, self.state) {
                 (true, State::Sliding { side }) => {
-                    self.last_walljump_time = Instant::now();
+                    self.last_walljump_time = game_time;
 
                     self.velocity.y = -self.properties.walljump_vertical_force;
                     self.velocity.x = match side {
@@ -384,10 +382,11 @@ impl Player {
         keycode: event::KeyCode,
         _keymods: event::KeyMods,
         repeat: bool,
+        game_time: GameInstant,
     ) {
         if keycode == event::KeyCode::Space && !repeat {
             self.pressed_jump = true;
-            self.jump_pressed_time = Instant::now();
+            self.jump_pressed_time = game_time;
         }
     }
 

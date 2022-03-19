@@ -1,5 +1,7 @@
 pub mod level;
 pub mod player;
+use std::time::Duration;
+
 pub use level::{Level, LevelTile};
 pub use player::{Player, PlayerProperties};
 
@@ -8,10 +10,41 @@ use glam::*;
 
 use ggez_egui::*;
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct GameInstant {
+    time_unpaused: Duration,
+}
+
+impl GameInstant {
+    pub fn from_game_start() -> Self {
+        Self {
+            time_unpaused: Duration::ZERO,
+        }
+    }
+
+    pub fn add_unpaused_delta(&mut self, delta: Duration) {
+        self.time_unpaused += delta;
+    }
+}
+
+impl std::ops::Add<Duration> for GameInstant {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self {
+            time_unpaused: self.time_unpaused + rhs,
+        }
+    }
+}
+
 struct MainState {
     level: Level,
     player: Player,
     egui_backend: EguiBackend,
+    paused: bool,
+    game_time: GameInstant,
+    screen_rect_mesh: graphics::Mesh,
+    paused_text: graphics::Text,
 }
 
 impl MainState {
@@ -20,10 +53,21 @@ impl MainState {
             tiled::Loader::new().load_tmx_map("assets/map.tmx").unwrap(),
             ctx,
         )?;
+        let game_time = GameInstant::from_game_start();
         let s = MainState {
-            player: Player::new(ctx, level.spawn_point)?,
+            player: Player::new(ctx, level.spawn_point, game_time)?,
             level,
             egui_backend: EguiBackend::new(ctx),
+            paused: false,
+            game_time,
+            screen_rect_mesh: graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::Fill(graphics::FillOptions::default()),
+                graphics::Rect::new(0., 0., 1000000., 1000000.),
+                graphics::Color::from_rgba(0, 0, 0, 80),
+            )
+            .unwrap(),
+            paused_text: graphics::Text::new("Paused"),
         };
         Ok(s)
     }
@@ -31,7 +75,10 @@ impl MainState {
 
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.player.update(ctx, &self.level);
+        if !self.paused {
+            self.player.update(ctx, &self.level, self.game_time);
+            self.game_time.add_unpaused_delta(timer::delta(ctx));
+        }
 
         let egui_ctx = self.egui_backend.ctx();
 
@@ -47,6 +94,18 @@ impl event::EventHandler<ggez::GameError> for MainState {
             .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
         self.player
             .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
+
+        if self.paused {
+            graphics::draw(ctx, &self.screen_rect_mesh, graphics::DrawParam::default())?;
+            graphics::queue_text(ctx, &self.paused_text, vec2(20., 20.), None);
+        }
+
+        graphics::draw_queued_text(
+            ctx,
+            graphics::DrawParam::default(),
+            None,
+            graphics::FilterMode::Linear,
+        )?;
 
         graphics::draw(ctx, &self.egui_backend, ([0.0, 0.0],))?;
 
@@ -91,9 +150,13 @@ impl event::EventHandler<ggez::GameError> for MainState {
     ) {
         self.egui_backend.input.key_down_event(keycode, keymods);
 
-        self.player.key_down_event(ctx, keycode, keymods, repeat);
+        self.player
+            .key_down_event(ctx, keycode, keymods, repeat, self.game_time);
         if keycode == event::KeyCode::R {
             self.player.teleport_to(self.level.spawn_point);
+        }
+        if keycode == event::KeyCode::Escape {
+            self.paused = !self.paused;
         }
     }
 
