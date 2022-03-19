@@ -4,6 +4,18 @@ A platformer template made in Rust, using `ggez` as framework and `tiled` for lo
 
 May evolve into an engine at some point; This repo is going to serve as the base for one of my future projects.
 
+## Controls
+A, D: Move left/right respectively
+Space: Jump (Hold to jump higher)
+
+If the "jumps available" setting is over 1, you can press the jump button in midair to jump again.
+
+If the "wall sliding" setting is enabled, you can slide down walls simply by touching them once. You
+can stop sliding by moving on the opposite direction.
+
+If the "wall jumping" setting is enabled, press the jump button while sliding down a wall to perform
+a walljump.
+
 ## Current / TODO Mechanics
 ### Level
 - [x] Load a single level
@@ -14,6 +26,10 @@ May evolve into an engine at some point; This repo is going to serve as the base
 
 ### Controls
 - [x] Basic player movement
+- [ ] Control rebinding
+- [ ] Gamepad support
+
+### Mechanics
 - [x] Simple AABB collision
 - [x] Multijump
 - [x] Sliding down walls
