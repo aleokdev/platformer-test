@@ -219,6 +219,7 @@ impl Player {
     }
 
     pub fn update(&mut self, ctx: &Context, level: &Level) {
+        // Obtain frame & input data
         let x_input: f32 = if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::A) {
             -1.
         } else if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::D) {
@@ -226,12 +227,12 @@ impl Player {
         } else {
             0.
         };
+        let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
+        let delta = timer::delta(ctx).as_secs_f32();
+
         if Instant::now() > self.jump_pressed_time + self.properties.jump_buffer_time {
             self.pressed_jump = false;
         }
-        let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
-
-        let delta = timer::delta(ctx).as_secs_f32();
 
         // Apply gravity
         self.velocity.y += if pressing_jump && self.velocity.y < 0. {
@@ -251,7 +252,7 @@ impl Player {
         }
 
         if x_input == 0. {
-            // Apply decceleration
+            // Apply horizontal decceleration
             let decceleration = match self.state {
                 State::Grounded => self.properties.ground_decceleration,
                 State::Airborne => self.properties.air_decceleration,
@@ -270,7 +271,7 @@ impl Player {
         } else if Instant::now()
             > self.last_walljump_time + self.properties.dead_time_after_walljump
         {
-            // Apply acceleration
+            // Apply horizontal acceleration
             let acceleration = if x_input.signum() != self.velocity.x.signum() {
                 match self.state {
                     State::Grounded => self.properties.ground_direction_change_acceleration,
@@ -314,33 +315,33 @@ impl Player {
             _ => (),
         }
 
+        // Handle jumping/walljumping
         if self.pressed_jump {
-            if self.properties.can_walljump && matches!(self.state, State::Sliding { .. }) {
-                self.last_walljump_time = Instant::now();
+            match (self.properties.can_walljump, self.state) {
+                (true, State::Sliding { side }) => {
+                    self.last_walljump_time = Instant::now();
 
-                self.velocity.y = -self.properties.walljump_vertical_force;
-                self.velocity.x = match self.state {
-                    State::Sliding {
-                        side: SlideSide::Left,
-                    } => self.properties.walljump_horizontal_force,
-                    State::Sliding {
-                        side: SlideSide::Right,
-                    } => -self.properties.walljump_horizontal_force,
-                    _ => unreachable!(),
+                    self.velocity.y = -self.properties.walljump_vertical_force;
+                    self.velocity.x = match side {
+                        SlideSide::Left => self.properties.walljump_horizontal_force,
+                        SlideSide::Right => -self.properties.walljump_horizontal_force,
+                    }
                 }
-            } else if self.can_jump {
-                self.pressed_jump = false;
+                _ if self.can_jump => {
+                    self.pressed_jump = false;
 
-                self.velocity.y = -self.properties.jump_force
-                    * self
-                        .properties
-                        .multijump_coefficient
-                        .powi(self.times_jumped_since_grounded as i32);
+                    self.velocity.y = -self.properties.jump_force
+                        * self
+                            .properties
+                            .multijump_coefficient
+                            .powi(self.times_jumped_since_grounded as i32);
 
-                self.times_jumped_since_grounded += 1;
-                if self.properties.jumps_available <= self.times_jumped_since_grounded {
-                    self.can_jump = false;
+                    self.times_jumped_since_grounded += 1;
+                    if self.properties.jumps_available <= self.times_jumped_since_grounded {
+                        self.can_jump = false;
+                    }
                 }
+                _ => (),
             }
         }
 
@@ -399,6 +400,9 @@ impl Player {
         if to_move.x == 0. && to_move.y == 0. {
             return;
         }
+        if self.state == State::Grounded {
+            self.state = State::Airborne;
+        }
 
         fn calculate_delta_step(delta: Vec2) -> Vec2 {
             const MAX_STEP_LENGTH: f32 = 0.1;
@@ -422,7 +426,7 @@ impl Player {
                 self.position.x = last_position.x;
                 if !self.is_colliding(level) {
                     // Not colliding when moved back on the X axis, the player was blocked by a wall
-                    if matches!(self.state, State::Grounded) {
+                    if matches!(self.state, State::Airborne) {
                         self.state = if self.velocity.x > 0. {
                             State::Sliding {
                                 side: SlideSide::Right,
@@ -501,9 +505,6 @@ impl Player {
 
     fn is_colliding(&self, level: &Level) -> bool {
         let col = self.collision_rect();
-        fn floor(point: Vec2) -> IVec2 {
-            ivec2(point.x.floor() as i32, point.y.floor() as i32)
-        }
         let tiles_to_check = [
             floor(col.point().into()),
             floor(vec2(col.x + col.w, col.y)),
@@ -519,21 +520,40 @@ impl Player {
     fn get_side_sliding_from(&self, level: &Level) -> Option<SlideSide> {
         const DISTANCE_TO_WALL_REQUIRED_TO_SLIDE: f32 = 0.1;
         let col = self.collision_rect();
-        let left_pos = col.x - DISTANCE_TO_WALL_REQUIRED_TO_SLIDE;
-        let right_pos = col.x + col.w + DISTANCE_TO_WALL_REQUIRED_TO_SLIDE;
+        let left_checks = [
+            floor(vec2(col.x - DISTANCE_TO_WALL_REQUIRED_TO_SLIDE, col.y)),
+            floor(vec2(
+                col.x - DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
+                col.y + col.h,
+            )),
+        ];
+        let right_checks = [
+            floor(vec2(
+                col.x + col.w + DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
+                col.y,
+            )),
+            floor(vec2(
+                col.x + col.w + DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
+                col.y + col.h,
+            )),
+        ];
 
-        if matches!(
-            level.get_tile(left_pos.floor() as i32, col.y.floor() as i32),
-            Some(LevelTile::Solid)
-        ) {
+        if left_checks
+            .into_iter()
+            .any(|pos| matches!(level.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+        {
             Some(SlideSide::Left)
-        } else if matches!(
-            level.get_tile(right_pos.floor() as i32, col.y.floor() as i32),
-            Some(LevelTile::Solid)
-        ) {
+        } else if right_checks
+            .into_iter()
+            .any(|pos| matches!(level.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+        {
             Some(SlideSide::Right)
         } else {
             None
         }
     }
+}
+
+fn floor(point: Vec2) -> IVec2 {
+    ivec2(point.x.floor() as i32, point.y.floor() as i32)
 }
