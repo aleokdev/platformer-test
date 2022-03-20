@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::input_binding;
 use ggez::*;
 use ggez_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
@@ -218,16 +219,16 @@ impl Player {
         })
     }
 
-    pub fn update(&mut self, ctx: &Context, level: &Level, game_time: GameInstant) {
+    pub fn update(
+        &mut self,
+        ctx: &Context,
+        level: &Level,
+        game_time: GameInstant,
+        input: &input_binding::InputBinder,
+    ) {
         // Obtain frame & input data
-        let x_input: f32 = if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::A) {
-            -1.
-        } else if input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::D) {
-            1.
-        } else {
-            0.
-        };
-        let pressing_jump = input::keyboard::is_key_pressed(ctx, input::keyboard::KeyCode::Space);
+        let x_input: f32 = input.axis(ctx, input_binding::Axis::Horizontal).value();
+        let pressing_jump = input.action(input_binding::Action::Jump).is_pressed();
         let delta = timer::delta(ctx).as_secs_f32();
 
         if game_time > self.jump_pressed_time + self.properties.jump_buffer_time {

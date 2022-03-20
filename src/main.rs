@@ -1,3 +1,4 @@
+pub mod input_binding;
 pub mod level;
 pub mod player;
 use std::time::Duration;
@@ -45,6 +46,7 @@ struct MainState {
     game_time: GameInstant,
     screen_rect_mesh: graphics::Mesh,
     paused_text: graphics::Text,
+    input_bindings: input_binding::InputBinder,
 }
 
 impl MainState {
@@ -68,6 +70,7 @@ impl MainState {
             )
             .unwrap(),
             paused_text: graphics::Text::new("Paused"),
+            input_bindings: Default::default(),
         };
         Ok(s)
     }
@@ -76,13 +79,16 @@ impl MainState {
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         if !self.paused {
-            self.player.update(ctx, &self.level, self.game_time);
+            self.player
+                .update(ctx, &self.level, self.game_time, &self.input_bindings);
             self.game_time.add_unpaused_delta(timer::delta(ctx));
         }
 
         let egui_ctx = self.egui_backend.ctx();
 
         self.player.properties.show_ui(&egui_ctx);
+
+        self.input_bindings.finish_frame();
 
         Ok(())
     }
@@ -121,6 +127,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         _y: f32,
     ) {
         self.egui_backend.input.mouse_button_down_event(button);
+        self.input_bindings.mouse_button_down_event(button);
     }
 
     fn mouse_button_up_event(
@@ -131,6 +138,25 @@ impl event::EventHandler<ggez::GameError> for MainState {
         _y: f32,
     ) {
         self.egui_backend.input.mouse_button_up_event(button);
+        self.input_bindings.mouse_button_up_event(button);
+    }
+
+    fn gamepad_button_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        btn: event::Button,
+        id: event::GamepadId,
+    ) {
+        self.input_bindings.gamepad_button_down_event(btn, id)
+    }
+
+    fn gamepad_button_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        btn: event::Button,
+        id: event::GamepadId,
+    ) {
+        self.input_bindings.gamepad_button_up_event(btn, id)
     }
 
     fn mouse_motion_event(&mut self, _ctx: &mut Context, x: f32, y: f32, _dx: f32, _dy: f32) {
@@ -141,6 +167,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.egui_backend.input.mouse_wheel_event(x, y);
     }
 
+    fn key_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        keycode: event::KeyCode,
+        keymods: event::KeyMods,
+    ) {
+        self.input_bindings.key_up_event(keycode, keymods);
+    }
+
     fn key_down_event(
         &mut self,
         ctx: &mut Context,
@@ -149,6 +184,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         repeat: bool,
     ) {
         self.egui_backend.input.key_down_event(keycode, keymods);
+        self.input_bindings.key_down_event(keycode, keymods, repeat);
 
         self.player
             .key_down_event(ctx, keycode, keymods, repeat, self.game_time);

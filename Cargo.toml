@@ -10,6 +10,7 @@ glam = "0.20.2"
 ggez-egui = "0.1.7"
 ggez = "0.7.0"
 tiled = "0.10.1"
+enum-map = "2.0.3"
 
 [profile.dev.package.ggez]
 opt-level = 3
