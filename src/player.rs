@@ -5,7 +5,7 @@ use ggez::*;
 use ggez_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
 
-use crate::{GameInstant, Level, LevelTile};
+use crate::{util::GameInstant, Level, LevelTile};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
