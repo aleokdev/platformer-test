@@ -324,7 +324,8 @@ impl Player {
                     self.velocity.x = match side {
                         SlideSide::Left => self.properties.walljump_horizontal_force,
                         SlideSide::Right => -self.properties.walljump_horizontal_force,
-                    }
+                    };
+                    self.pressed_jump = false;
                 }
                 _ if self.can_jump => {
                     self.pressed_jump = false;
