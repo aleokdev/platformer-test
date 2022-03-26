@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use ggez::*;
 use glam::{vec2, Vec2};
+use path_clean::PathClean;
 
 pub enum LevelTile {
     Solid,
@@ -66,8 +67,7 @@ impl Level {
                             let (batch, image) = batches
                                 .entry(tile.get_tileset().image.as_ref().unwrap().source.clone())
                                 .or_insert_with_key(|path| {
-                                    let mut p = PathBuf::from("/");
-                                    p.push(path);
+                                    let p = PathBuf::from("/").join(path).clean();
                                     let image = graphics::Image::new(ctx, p).unwrap();
                                     let batch =
                                         graphics::spritebatch::SpriteBatch::new(image.clone());

@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.8" tiledversion="1.8.2" orientation="orthogonal" renderorder="right-down" width="40" height="25" tilewidth="18" tileheight="18" infinite="0" nextlayerid="6" nextobjectid="6">
  <tileset firstgid="1" name="stone" tilewidth="18" tileheight="18" tilecount="81" columns="9">
-  <image source="pixel-platformer-blocks/Tilemap/stone_packed.png" width="162" height="162"/>
+  <image source="../pixel-platformer-blocks/Tilemap/stone_packed.png" width="162" height="162"/>
  </tileset>
  <tileset firstgid="82" name="rock" tilewidth="18" tileheight="18" tilecount="81" columns="9">
-  <image source="pixel-platformer-blocks/Tilemap/rock_packed.png" width="162" height="162"/>
+  <image source="../pixel-platformer-blocks/Tilemap/rock_packed.png" width="162" height="162"/>
  </tileset>
  <tileset firstgid="163" name="sand" tilewidth="18" tileheight="18" tilecount="81" columns="9">
-  <image source="pixel-platformer-blocks/Tilemap/sand_packed.png" width="162" height="162"/>
+  <image source="../pixel-platformer-blocks/Tilemap/sand_packed.png" width="162" height="162"/>
  </tileset>
  <tileset firstgid="244" name="marble_packed" tilewidth="18" tileheight="18" tilecount="81" columns="9">
-  <image source="pixel-platformer-blocks/Tilemap/marble_packed.png" width="162" height="162"/>
+  <image source="../pixel-platformer-blocks/Tilemap/marble_packed.png" width="162" height="162"/>
  </tileset>
  <layer id="5" name="Background" width="40" height="25" tintcolor="#292a2f">
   <data encoding="csv">

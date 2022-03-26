@@ -1,14 +1,14 @@
 {
     "maps": [
         {
-            "fileName": "../map.tmx",
+            "fileName": "start.tmx",
             "height": 450,
             "width": 720,
             "x": 0,
             "y": 0
         },
         {
-            "fileName": "../map1.tmx",
+            "fileName": "walljumps.tmx",
             "height": 450,
             "width": 720,
             "x": 720,
