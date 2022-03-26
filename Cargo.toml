@@ -9,7 +9,8 @@ edition = "2021"
 glam = "0.20.2"
 ggez-egui = "0.1.7"
 ggez = "0.7.0"
-tiled = "0.10.1"
+# FIXME: Wait until 0.11.0 (Needed for VFS support)
+tiled = {git = "https://github.com/mapeditor/rs-tiled", rev = "e176b4b77f4eb3ea6041bab3630dc83b4942babf"}
 enum-map = "2.0.3"
 
 [profile.dev.package.ggez]

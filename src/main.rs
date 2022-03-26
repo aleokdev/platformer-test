@@ -49,10 +49,31 @@ struct MainState {
     input_bindings: input_binding::InputBinder,
 }
 
+// Need to do newtype to implement ResourceReader for ggez's filesystem
+pub struct FsContext<'ctx>(pub &'ctx ggez::Context);
+
+impl tiled::ResourceReader for FsContext<'_> {
+    type Resource = filesystem::File;
+
+    type Error = GameError;
+
+    fn read_from(
+        &mut self,
+        path: &std::path::Path,
+    ) -> std::result::Result<Self::Resource, Self::Error> {
+        filesystem::open(&self.0, path)
+    }
+}
+
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let level = Level::new(
-            tiled::Loader::new().load_tmx_map("assets/map.tmx").unwrap(),
+            tiled::Loader::with_cache_and_reader(
+                tiled::DefaultResourceCache::new(),
+                FsContext(ctx),
+            )
+            .load_tmx_map("/map.tmx")
+            .unwrap(),
             ctx,
         )?;
         let game_time = GameInstant::from_game_start();
@@ -208,7 +229,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
 pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("super_simple", "aleok")
         .window_setup(conf::WindowSetup::default().title("Platformer test"))
-        .add_resource_path(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+        .add_resource_path(
+            std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default())
+                .join("assets"),
+        );
     let (mut ctx, event_loop) = cb.build()?;
     let state = MainState::new(&mut ctx)?;
     event::run(ctx, event_loop, state)
