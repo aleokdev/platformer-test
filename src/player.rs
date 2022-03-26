@@ -231,10 +231,6 @@ impl Player {
         let pressing_jump = input.action(input_binding::Action::Jump).is_pressed();
         let delta = timer::delta(ctx).as_secs_f32();
 
-        if game_time > self.jump_pressed_time + self.properties.jump_buffer_time {
-            self.pressed_jump = false;
-        }
-
         // Apply gravity
         self.velocity.y += if pressing_jump && self.velocity.y < 0. {
             self.properties.jump_gravity
@@ -318,6 +314,7 @@ impl Player {
         if self.pressed_jump {
             match (self.properties.can_walljump, self.state) {
                 (true, State::Sliding { side }) => {
+                    self.pressed_jump = false;
                     self.last_walljump_time = game_time;
 
                     self.velocity.y = -self.properties.walljump_vertical_force;
@@ -325,7 +322,6 @@ impl Player {
                         SlideSide::Left => self.properties.walljump_horizontal_force,
                         SlideSide::Right => -self.properties.walljump_horizontal_force,
                     };
-                    self.pressed_jump = false;
                 }
                 _ if self.can_jump => {
                     self.pressed_jump = false;
@@ -342,6 +338,11 @@ impl Player {
                     }
                 }
                 _ => (),
+            }
+
+            // Reset jump buffer if appropiate
+            if game_time > self.jump_pressed_time + self.properties.jump_buffer_time {
+                self.pressed_jump = false;
             }
         }
 
