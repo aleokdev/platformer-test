@@ -8,10 +8,13 @@ edition = "2021"
 [dependencies]
 glam = "0.20.2"
 ggez-egui = "0.1.7"
+# FIXME: Wait until 0.8.0 (Needed for subcontext split)
 ggez = "0.7.0"
 # FIXME: Wait until 0.11.0 (Needed for VFS support)
 # FIXME: Wait until https://github.com/mapeditor/rs-tiled/pull/206 (Needed for Tiled error
 # conversion to anyhow errors)
+# FIXME: Wait until https://github.com/mapeditor/rs-tiled/pull/207 (Needed for getting loader reader
+# mutably)
 tiled = {git = "https://github.com/aleokdev/rs-tiled", rev = "80e3d39843a87ec1a8079105d056e29c765923f6"}
 enum-map = "2.0.3"
 serde_json = "1.0"
