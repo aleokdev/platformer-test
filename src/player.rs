@@ -59,106 +59,94 @@ impl Default for PlayerProperties {
 
 impl PlayerProperties {
     pub fn show_ui(&mut self, egui_ctx: &egui::CtxRef) {
-        egui::Window::new("Property editor")
-            .anchor(egui::Align2::RIGHT_BOTTOM, (0., 0.))
-            .show(egui_ctx, |ui| {
-                ui.add(
-                    egui::Slider::new(&mut self.max_run_speed, 0f32..=100.).text("Max run speed"),
-                );
-                egui::CollapsingHeader::new("Grounded properties")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::Slider::new(&mut self.ground_decceleration, 0f32..=100.)
-                                .text("Ground decceleration"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.ground_acceleration, 0f32..=100.)
-                                .text("Ground acceleration"),
-                        );
-                        ui.add(
-                            egui::Slider::new(
-                                &mut self.ground_direction_change_acceleration,
-                                0f32..=200.,
-                            )
-                            .text("Ground direction change acceleration"),
-                        );
-                    });
-                egui::CollapsingHeader::new("Airborne properties")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::Slider::new(&mut self.air_acceleration, 0f32..=100.)
-                                .text("Air acceleration"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.air_decceleration, 0f32..=100.)
-                                .text("Air decceleration"),
-                        );
-                        ui.add(
-                            egui::Slider::new(
-                                &mut self.air_direction_change_acceleration,
-                                0f32..=200.,
-                            )
+        egui::CentralPanel::default().show(egui_ctx, |ui| {
+            ui.add(egui::Slider::new(&mut self.max_run_speed, 0f32..=100.).text("Max run speed"));
+            egui::CollapsingHeader::new("Grounded properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.ground_decceleration, 0f32..=100.)
+                            .text("Ground decceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.ground_acceleration, 0f32..=100.)
+                            .text("Ground acceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(
+                            &mut self.ground_direction_change_acceleration,
+                            0f32..=200.,
+                        )
+                        .text("Ground direction change acceleration"),
+                    );
+                });
+            egui::CollapsingHeader::new("Airborne properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut self.air_acceleration, 0f32..=100.)
+                            .text("Air acceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.air_decceleration, 0f32..=100.)
+                            .text("Air decceleration"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.air_direction_change_acceleration, 0f32..=200.)
                             .text("Air direction change acceleration"),
-                        );
-                        ui.add(egui::Slider::new(&mut self.gravity, 0f32..=200.).text("Gravity"));
+                    );
+                    ui.add(egui::Slider::new(&mut self.gravity, 0f32..=200.).text("Gravity"));
 
+                    ui.add(
+                        egui::Slider::new(&mut self.terminal_speed, 0f32..=100.)
+                            .text("Terminal speed"),
+                    );
+                });
+            egui::CollapsingHeader::new("Jump properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    ui.add(egui::Slider::new(&mut self.jump_force, 1f32..=100.).text("Jump Force"));
+                    ui.add(
+                        egui::Slider::new(&mut self.jump_gravity, 0f32..=100.).text("Jump Gravity"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.jumps_available, 0..=3).text("Jumps Available"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut self.multijump_coefficient, 0f32..=1.)
+                            .text("Multijump coefficient"),
+                    );
+                    let mut allow_wallsliding = self.wallslide_max_v_speed.is_some();
+                    ui.add(egui::Checkbox::new(
+                        &mut allow_wallsliding,
+                        "Allow wallsliding",
+                    ));
+                    if !allow_wallsliding {
+                        self.wallslide_max_v_speed = None;
+                    } else {
+                        let mut wallslide_max_v_speed = self.wallslide_max_v_speed.unwrap_or(15.);
                         ui.add(
-                            egui::Slider::new(&mut self.terminal_speed, 0f32..=100.)
-                                .text("Terminal speed"),
+                            egui::Slider::new(&mut wallslide_max_v_speed, 0f32..=100.)
+                                .text("Wallslide max vertical speed"),
                         );
-                    });
-                egui::CollapsingHeader::new("Jump properties")
-                    .default_open(true)
-                    .show(ui, |ui| {
+                        self.wallslide_max_v_speed = Some(wallslide_max_v_speed);
+                    }
+                    ui.add(egui::Checkbox::new(
+                        &mut self.can_walljump,
+                        "Allow walljumps",
+                    ));
+                    if self.can_walljump {
                         ui.add(
-                            egui::Slider::new(&mut self.jump_force, 1f32..=100.).text("Jump Force"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.jump_gravity, 0f32..=100.)
-                                .text("Jump Gravity"),
-                        );
-                        ui.add(
-                            egui::Slider::new(&mut self.jumps_available, 0..=3)
-                                .text("Jumps Available"),
+                            egui::Slider::new(&mut self.walljump_horizontal_force, 0f32..=100.)
+                                .text("Walljump horizontal force"),
                         );
                         ui.add(
-                            egui::Slider::new(&mut self.multijump_coefficient, 0f32..=1.)
-                                .text("Multijump coefficient"),
+                            egui::Slider::new(&mut self.walljump_vertical_force, 0f32..=100.)
+                                .text("Walljump vertical force"),
                         );
-                        let mut allow_wallsliding = self.wallslide_max_v_speed.is_some();
-                        ui.add(egui::Checkbox::new(
-                            &mut allow_wallsliding,
-                            "Allow wallsliding",
-                        ));
-                        if !allow_wallsliding {
-                            self.wallslide_max_v_speed = None;
-                        } else {
-                            let mut wallslide_max_v_speed =
-                                self.wallslide_max_v_speed.unwrap_or(15.);
-                            ui.add(
-                                egui::Slider::new(&mut wallslide_max_v_speed, 0f32..=100.)
-                                    .text("Wallslide max vertical speed"),
-                            );
-                            self.wallslide_max_v_speed = Some(wallslide_max_v_speed);
-                        }
-                        ui.add(egui::Checkbox::new(
-                            &mut self.can_walljump,
-                            "Allow walljumps",
-                        ));
-                        if self.can_walljump {
-                            ui.add(
-                                egui::Slider::new(&mut self.walljump_horizontal_force, 0f32..=100.)
-                                    .text("Walljump horizontal force"),
-                            );
-                            ui.add(
-                                egui::Slider::new(&mut self.walljump_vertical_force, 0f32..=100.)
-                                    .text("Walljump vertical force"),
-                            );
-                        }
-                    });
-            });
+                    }
+                });
+        });
     }
 }
 

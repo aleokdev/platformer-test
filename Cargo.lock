@@ -83,6 +83,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "000444226fcff248f2bc4c7625be32c63caccfecc2723a2b9f78a7487a49c407"
 
 [[package]]
+name = "anyhow"
+version = "1.0.56"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1898,6 +1904,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "path-clean"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecba01bf2678719532c5e3059e0b5f0811273d94b397088b82e3bd0a78c78fdd"
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1919,10 +1931,14 @@ checksum = "58893f751c9b0412871a09abd62ecd2a00298c6c83befa223ef98c52aef40cbe"
 name = "platformer-test"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "enum-map",
  "ggez",
  "ggez-egui",
  "glam",
+ "path-clean",
+ "serde",
+ "serde_json",
  "tiled",
 ]
 
@@ -2483,7 +2499,7 @@ dependencies = [
 [[package]]
 name = "tiled"
 version = "0.10.1"
-source = "git+https://github.com/mapeditor/rs-tiled?rev=e176b4b77f4eb3ea6041bab3630dc83b4942babf#e176b4b77f4eb3ea6041bab3630dc83b4942babf"
+source = "git+https://github.com/aleokdev/rs-tiled?rev=80e3d39843a87ec1a8079105d056e29c765923f6#80e3d39843a87ec1a8079105d056e29c765923f6"
 dependencies = [
  "base64",
  "libflate",

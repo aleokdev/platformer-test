@@ -1,7 +1,7 @@
 pub mod input_binding;
 pub mod level;
 pub mod player;
-use std::time::Duration;
+use std::{collections::HashMap, path::Path, time::Duration};
 
 pub use level::{Level, LevelTile};
 pub use player::{Player, PlayerProperties};
@@ -10,6 +10,9 @@ use ggez::*;
 use glam::*;
 
 use ggez_egui::*;
+
+use path_clean::PathClean;
+use serde::Deserialize;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct GameInstant {
@@ -38,8 +41,54 @@ impl std::ops::Add<Duration> for GameInstant {
     }
 }
 
+struct World {
+    levels: HashMap<IVec2, Level>,
+}
+
+impl World {
+    fn from_file(ctx: &mut Context, path: &Path) -> anyhow::Result<Self> {
+        #[derive(Deserialize)]
+        struct MapRefJson {
+            #[serde(rename = "fileName")]
+            filename: std::path::PathBuf,
+            x: i32,
+            y: i32,
+        }
+        #[derive(Deserialize)]
+        struct WorldJson {
+            maps: Vec<MapRefJson>,
+        }
+        let json: WorldJson = serde_json::from_reader(filesystem::open(ctx, path)?)?;
+        let mut loader = tiled::Loader::with_cache_and_reader(
+            tiled::DefaultResourceCache::new(),
+            FsContext(ctx),
+        );
+        let dir = path.parent().unwrap();
+
+        Ok(Self {
+            levels: json
+                .maps
+                .into_iter()
+                .map(|map| -> Result<_, anyhow::Error> {
+                    let path = dir.join(map.filename).clean();
+                    dbg!(&path);
+                    Ok((
+                        ivec2(map.x, map.y),
+                        Level::new(loader.load_tmx_map(path)?, loader.reader_mut().0)?,
+                    ))
+                })
+                .collect::<Result<_, _>>()?,
+        })
+    }
+
+    fn level(&self, pos: IVec2) -> &Level {
+        &self.levels[&pos]
+    }
+}
+
 struct MainState {
-    level: Level,
+    world: World,
+    current_level: IVec2,
     player: Player,
     egui_backend: EguiBackend,
     paused: bool,
@@ -47,10 +96,12 @@ struct MainState {
     screen_rect_mesh: graphics::Mesh,
     paused_text: graphics::Text,
     input_bindings: input_binding::InputBinder,
+    player_props_ui_visible: bool,
 }
 
 // Need to do newtype to implement ResourceReader for ggez's filesystem
-pub struct FsContext<'ctx>(pub &'ctx ggez::Context);
+// FIXME: This would greatly improve with separated subcontexts (ggez 0.8.0)
+pub struct FsContext<'ctx>(pub &'ctx mut ggez::Context);
 
 impl tiled::ResourceReader for FsContext<'_> {
     type Resource = filesystem::File;
@@ -67,19 +118,14 @@ impl tiled::ResourceReader for FsContext<'_> {
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let level = Level::new(
-            tiled::Loader::with_cache_and_reader(
-                tiled::DefaultResourceCache::new(),
-                FsContext(ctx),
-            )
-            .load_tmx_map("/map.tmx")
-            .unwrap(),
-            ctx,
-        )?;
         let game_time = GameInstant::from_game_start();
+        // FIXME: Wait until `GameResult` allows for actually any error instead of just `CustomError`
+        let world = World::from_file(ctx, Path::new("/world/world.world")).unwrap();
+        let current_level = ivec2(0, 0);
         let s = MainState {
-            player: Player::new(ctx, level.spawn_point, game_time)?,
-            level,
+            player: Player::new(ctx, world.levels[&current_level].spawn_point, game_time)?,
+            world,
+            current_level,
             egui_backend: EguiBackend::new(ctx),
             paused: false,
             game_time,
@@ -92,6 +138,7 @@ impl MainState {
             .unwrap(),
             paused_text: graphics::Text::new("Paused"),
             input_bindings: Default::default(),
+            player_props_ui_visible: false,
         };
         Ok(s)
     }
@@ -100,14 +147,20 @@ impl MainState {
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         if !self.paused {
-            self.player
-                .update(ctx, &self.level, self.game_time, &self.input_bindings);
+            self.player.update(
+                ctx,
+                self.world.level(self.current_level),
+                self.game_time,
+                &self.input_bindings,
+            );
             self.game_time.add_unpaused_delta(timer::delta(ctx));
         }
 
         let egui_ctx = self.egui_backend.ctx();
 
-        self.player.properties.show_ui(&egui_ctx);
+        if self.player_props_ui_visible {
+            self.player.properties.show_ui(&egui_ctx);
+        }
 
         self.input_bindings.finish_frame();
 
@@ -117,7 +170,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
-        self.level
+        self.world
+            .level(self.current_level)
             .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
         self.player
             .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
@@ -210,10 +264,14 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.player
             .key_down_event(ctx, keycode, keymods, repeat, self.game_time);
         if keycode == event::KeyCode::R {
-            self.player.teleport_to(self.level.spawn_point);
+            self.player
+                .teleport_to(self.world.level(self.current_level).spawn_point);
         }
         if keycode == event::KeyCode::Escape {
             self.paused = !self.paused;
+        }
+        if keycode == event::KeyCode::I && keymods == event::KeyMods::CTRL {
+            self.player_props_ui_visible = !self.player_props_ui_visible;
         }
     }
 

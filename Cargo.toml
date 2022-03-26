@@ -10,8 +10,14 @@ glam = "0.20.2"
 ggez-egui = "0.1.7"
 ggez = "0.7.0"
 # FIXME: Wait until 0.11.0 (Needed for VFS support)
-tiled = {git = "https://github.com/mapeditor/rs-tiled", rev = "e176b4b77f4eb3ea6041bab3630dc83b4942babf"}
+# FIXME: Wait until https://github.com/mapeditor/rs-tiled/pull/206 (Needed for Tiled error
+# conversion to anyhow errors)
+tiled = {git = "https://github.com/aleokdev/rs-tiled", rev = "80e3d39843a87ec1a8079105d056e29c765923f6"}
 enum-map = "2.0.3"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+path-clean = "0.1.0"
 
 [profile.dev.package.ggez]
 opt-level = 3
