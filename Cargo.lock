@@ -2499,7 +2499,7 @@ dependencies = [
 [[package]]
 name = "tiled"
 version = "0.10.1"
-source = "git+https://github.com/aleokdev/rs-tiled?rev=80e3d39843a87ec1a8079105d056e29c765923f6#80e3d39843a87ec1a8079105d056e29c765923f6"
+source = "git+https://github.com/mapeditor/rs-tiled?rev=b2c19a03cf159dae59c86a0e692ef127ec4aa64f#b2c19a03cf159dae59c86a0e692ef127ec4aa64f"
 dependencies = [
  "base64",
  "libflate",

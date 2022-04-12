@@ -350,18 +350,11 @@ impl Player {
         graphics::draw(
             ctx,
             &self.image,
-            draw_param
-                .dest(self.position * 18.)
-                .color(match self.state {
-                    State::Grounded => graphics::Color::RED,
-                    State::Airborne => graphics::Color::WHITE,
-                    State::Sliding { .. } => graphics::Color::GREEN,
-                }),
-        )?;
-        graphics::draw(
-            ctx,
-            &graphics::Text::new(format!("pos: {}, vel: {}", self.position, self.velocity)),
-            graphics::DrawParam::default(),
+            draw_param.dest(self.position).color(match self.state {
+                State::Grounded => graphics::Color::RED,
+                State::Airborne => graphics::Color::WHITE,
+                State::Sliding { .. } => graphics::Color::GREEN,
+            }),
         )?;
 
         Ok(())
@@ -509,7 +502,7 @@ impl Player {
 
         tiles_to_check
             .into_iter()
-            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
     }
 
     fn get_side_sliding_from(&self, world: &World) -> Option<SlideSide> {
@@ -535,17 +528,22 @@ impl Player {
 
         if left_checks
             .into_iter()
-            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
         {
             Some(SlideSide::Left)
         } else if right_checks
             .into_iter()
-            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
         {
             Some(SlideSide::Right)
         } else {
             None
         }
+    }
+
+    /// Get the player's velocity.
+    pub fn velocity(&self) -> Vec2 {
+        self.velocity
     }
 }
 

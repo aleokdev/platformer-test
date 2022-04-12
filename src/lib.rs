@@ -37,7 +37,8 @@ impl MainState {
         let current_level = ivec2(0, 0);
         let player = Player::new(
             ctx,
-            world.level(current_level).unwrap().spawn_point,
+            //FIXME: spawnpoint is relative to room, need to make it absolute
+            world.room(current_level).unwrap().level.spawn_point,
             game_time,
         )?;
 
@@ -60,6 +61,10 @@ impl MainState {
             camera_position: Vec2::ZERO,
         })
     }
+
+    fn player_room_pos(&self) -> IVec2 {
+        self.world.tile_to_room_pos(self.player.position())
+    }
 }
 
 // FIXME: Wait for https://github.com/ggez/ggez/pull/1022 to have E = anyhow::Error
@@ -77,6 +82,11 @@ impl event::EventHandler<GameError> for MainState {
             self.player.properties.show_ui(&egui_ctx);
         }
 
+        if self.world.room(self.player_room_pos()).is_none() {
+            self.player
+                .teleport_to(self.world.room(ivec2(0, 0)).unwrap().level.spawn_point);
+        }
+
         self.input_bindings.finish_frame();
 
         Ok(())
@@ -84,19 +94,45 @@ impl event::EventHandler<GameError> for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
+        let player_room_pos = self.player_room_pos();
+        self.camera_position = (player_room_pos * self.world.room_size()).as_vec2();
+        graphics::set_screen_coordinates(
+            ctx,
+            graphics::Rect {
+                x: self.camera_position.x,
+                y: self.camera_position.y,
+                w: self.world.room_size().x as f32,
+                h: self.world.room_size().y as f32,
+            },
+        )?;
 
-        let player_room_pos = self.world.tile_to_room_pos(self.player.position());
-        self.world.level(player_room_pos).unwrap().draw(
+        let player_room = self.world.room(player_room_pos).unwrap();
+        player_room.level.draw(
             ctx,
             graphics::DrawParam::default()
-                .dest(vec2(
-                    (player_room_pos.x * self.world.room_size().x * 18) as f32,
-                    (player_room_pos.y * self.world.room_size().y * 18) as f32,
-                ))
-                .scale([18., 18.]),
+                .dest((player_room.position * self.world.room_size()).as_vec2()),
         )?;
-        self.player
-            .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
+        self.player.draw(ctx, graphics::DrawParam::default())?;
+
+        graphics::set_screen_coordinates(
+            ctx,
+            graphics::Rect {
+                x: 0.,
+                y: 0.,
+                w: graphics::window(ctx).inner_size().width as f32,
+                h: graphics::window(ctx).inner_size().height as f32,
+            },
+        )?;
+
+        graphics::draw(
+            ctx,
+            &graphics::Text::new(format!(
+                "pos: {}, vel: {}",
+                self.player.position(),
+                self.player.velocity()
+            )),
+            graphics::DrawParam::default(),
+        )?;
 
         if self.paused {
             graphics::draw(ctx, &self.screen_rect_mesh, graphics::DrawParam::default())?;
@@ -188,8 +224,9 @@ impl event::EventHandler<GameError> for MainState {
         if keycode == event::KeyCode::R {
             self.player.teleport_to(
                 self.world
-                    .level(self.world.tile_to_room_pos(self.player.position()))
+                    .room(self.world.tile_to_room_pos(self.player.position()))
                     .unwrap()
+                    .level
                     .spawn_point,
             );
         }

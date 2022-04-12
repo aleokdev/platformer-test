@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use ggez::*;
-use glam::{vec2, Vec2};
+use glam::{vec2, IVec2, Vec2};
 use path_clean::PathClean;
 
 pub enum LevelTile {
@@ -34,9 +34,9 @@ impl Level {
         })
     }
 
-    pub fn get_tile(&self, x: i32, y: i32) -> Option<&LevelTile> {
-        if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
-            self.tiles[(x + y * self.width as i32) as usize].as_ref()
+    pub fn get_tile(&self, pos: IVec2) -> Option<&LevelTile> {
+        if pos.x >= 0 && pos.x < self.width as i32 && pos.y >= 0 && pos.y < self.height as i32 {
+            self.tiles[(pos.x + pos.y * self.width as i32) as usize].as_ref()
         } else {
             None
         }
@@ -69,8 +69,7 @@ impl Level {
         for layer in map.layers() {
             let mut batches =
                 HashMap::<PathBuf, (graphics::spritebatch::SpriteBatch, graphics::Image)>::new(); // FIXME: Wait until SpriteBatch::image() is public
-            if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) = layer.layer_type()
-            {
+            if let tiled::LayerType::Tiles(tiled::TileLayer::Finite(layer)) = layer.layer_type() {
                 for x in 0..layer.width() as i32 {
                     for y in 0..layer.height() as i32 {
                         if let Some(tile) = layer.get_tile(x, y) {
@@ -105,7 +104,7 @@ impl Level {
     }
 
     fn extract_level_tiles(map: &tiled::Map) -> Vec<Option<LevelTile>> {
-        if let tiled::LayerType::TileLayer(tiled::TileLayer::Finite(layer)) = map
+        if let tiled::LayerType::Tiles(tiled::TileLayer::Finite(layer)) = map
             .layers()
             .find(|layer| layer.name == "solid")
             .unwrap()
@@ -122,7 +121,7 @@ impl Level {
 
     fn locate_spawn_point(map: &tiled::Map) -> Option<Vec2> {
         map.layers().find_map(|layer| match layer.layer_type() {
-            tiled::LayerType::ObjectLayer(layer) => layer.objects().nth(0).map(|obj| {
+            tiled::LayerType::Objects(layer) => layer.objects().nth(0).map(|obj| {
                 vec2(
                     obj.x / map.tile_width as f32,
                     obj.y / map.tile_height as f32,

@@ -23,13 +23,13 @@ impl tiled::ResourceReader for FsContext<'_> {
     }
 }
 
-pub struct PositionedLevel {
-    room_position: IVec2,
-    level: Level,
+pub struct Room {
+    pub position: IVec2,
+    pub level: Level,
 }
 
 pub struct World {
-    levels: Vec<PositionedLevel>,
+    levels: Vec<Room>,
     /// Keys are room positions, values are indices into the levels vector
     map: HashMap<IVec2, usize>,
     room_size: IVec2,
@@ -57,13 +57,13 @@ impl World {
             FsContext(ctx),
         );
         let dir = path.parent().unwrap();
-        let levels: Vec<(IVec2, Level)> = json
+        let levels: Vec<Room> = json
             .maps
             .into_iter()
             .map(|map| -> Result<_, anyhow::Error> {
                 let path = dir.join(map.filename).clean();
-                Ok(PositionedLevel {
-                    room_position: ivec2(map.x / 18, map.y / 18) / room_size,
+                Ok(Room {
+                    position: ivec2(map.x / 18, map.y / 18) / room_size,
                     level: Level::new(loader.load_tmx_map(path)?, loader.reader_mut().0)?,
                 })
             })
@@ -71,12 +71,12 @@ impl World {
 
         // Create room position to level map
         let mut map = HashMap::new();
-        for (level_idx, (pos, level)) in levels.iter().enumerate() {
-            let size = ivec2(level.width() as i32, level.height() as i32);
+        for (level_idx, room) in levels.iter().enumerate() {
+            let size = ivec2(room.level.width() as i32, room.level.height() as i32);
 
             for x in 0..size.x / room_size.x {
                 for y in 0..size.y / room_size.y {
-                    map.insert(*pos + ivec2(x, y), level_idx);
+                    map.insert(room.position + ivec2(x, y), level_idx);
                 }
             }
         }
@@ -90,16 +90,18 @@ impl World {
         })
     }
 
-    pub fn level(&self, pos: IVec2) -> Option<&PositionedLevel> {
-        self.map.get(&pos).map(|idx| &self.levels[*idx].level)
+    pub fn room(&self, room_coords: IVec2) -> Option<&Room> {
+        self.map.get(&room_coords).map(|idx| &self.levels[*idx])
     }
 
-    pub fn get_tile(&self, x: i32, y: i32) -> Option<&LevelTile> {
-        let world_pos = ivec2(x, y);
-        let level_pos = world_pos / self.room_size;
-        let local_pos = world_pos - level_pos * self.room_size;
-        self.level(level_pos)
-            .and_then(|level| level.get_tile(local_pos.x, local_pos.y))
+    pub fn get_tile(&self, world_pos: IVec2) -> Option<&LevelTile> {
+        let room_pos = (world_pos.as_vec2() / self.room_size.as_vec2())
+            .floor()
+            .as_ivec2();
+        self.room(room_pos).and_then(|level| {
+            let local_pos = world_pos - level.position * self.room_size;
+            level.level.get_tile(local_pos)
+        })
     }
 
     /// Get the size of a room (smallest level possible), in tiles.
