@@ -13,6 +13,13 @@
             "width": 720,
             "x": 720,
             "y": 0
+        },
+        {
+            "fileName": "large_flat.tmx",
+            "height": 450,
+            "width": 1440,
+            "x": -1440,
+            "y": 0
         }
     ],
     "onlyShowAdjacentMaps": false,

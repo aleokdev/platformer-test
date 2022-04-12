@@ -48,6 +48,16 @@ impl Level {
         }
         Ok(())
     }
+
+    /// Get the level's width.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Get the level's height.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 }
 
 impl Level {

@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use crate::input_binding;
+use crate::{input_binding, World};
 use ggez::*;
 use ggez_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
 
-use crate::{util::GameInstant, Level, LevelTile};
+use crate::{util::GameInstant, LevelTile};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -210,7 +210,7 @@ impl Player {
     pub fn update(
         &mut self,
         ctx: &Context,
-        level: &Level,
+        world: &World,
         game_time: GameInstant,
         input: &input_binding::InputBinder,
     ) {
@@ -334,7 +334,7 @@ impl Player {
             }
         }
 
-        self.try_move(self.velocity * delta, level);
+        self.try_move(self.velocity * delta, world);
     }
 
     pub fn collision_rect(&self) -> graphics::Rect {
@@ -386,7 +386,12 @@ impl Player {
         self.velocity = vec2(0., 0.);
     }
 
-    fn try_move(&mut self, mut to_move: Vec2, level: &Level) {
+    /// Get the player's position.
+    pub fn position(&self) -> Vec2 {
+        self.position
+    }
+
+    fn try_move(&mut self, mut to_move: Vec2, world: &World) {
         if to_move.x == 0. && to_move.y == 0. {
             return;
         }
@@ -411,10 +416,10 @@ impl Player {
             self.position += step;
             to_move -= step;
 
-            if self.is_colliding(level) {
+            if self.is_colliding(world) {
                 // Move one axis at a time to figure out where/how the collision happened
                 self.position.x = last_position.x;
-                if !self.is_colliding(level) {
+                if !self.is_colliding(world) {
                     // Not colliding when moved back on the X axis, the player was blocked by a wall
                     if matches!(self.state, State::Airborne) {
                         self.state = if self.velocity.x > 0. {
@@ -433,7 +438,7 @@ impl Player {
                 } else {
                     self.position.x += step.x;
                     self.position.y = last_position.y;
-                    if !self.is_colliding(level) {
+                    if !self.is_colliding(world) {
                         // Not colliding when moved back on the Y axis, the player was blocked by
                         // the ground/ceiling
                         if self.velocity.y > 0. {
@@ -483,7 +488,7 @@ impl Player {
                 },
                 vx,
             ) if vx < 0. => self.state = State::Airborne,
-            (State::Sliding { .. }, ..) => match self.get_side_sliding_from(level) {
+            (State::Sliding { .. }, ..) => match self.get_side_sliding_from(world) {
                 Some(actual_side) => {
                     self.state = State::Sliding { side: actual_side };
                 }
@@ -493,7 +498,7 @@ impl Player {
         }
     }
 
-    fn is_colliding(&self, level: &Level) -> bool {
+    fn is_colliding(&self, world: &World) -> bool {
         let col = self.collision_rect();
         let tiles_to_check = [
             floor(col.point().into()),
@@ -504,10 +509,10 @@ impl Player {
 
         tiles_to_check
             .into_iter()
-            .any(|pos| matches!(level.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
     }
 
-    fn get_side_sliding_from(&self, level: &Level) -> Option<SlideSide> {
+    fn get_side_sliding_from(&self, world: &World) -> Option<SlideSide> {
         const DISTANCE_TO_WALL_REQUIRED_TO_SLIDE: f32 = 0.1;
         let col = self.collision_rect();
         let left_checks = [
@@ -530,12 +535,12 @@ impl Player {
 
         if left_checks
             .into_iter()
-            .any(|pos| matches!(level.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
         {
             Some(SlideSide::Left)
         } else if right_checks
             .into_iter()
-            .any(|pos| matches!(level.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
+            .any(|pos| matches!(world.get_tile(pos.x, pos.y), Some(LevelTile::Solid)))
         {
             Some(SlideSide::Right)
         } else {

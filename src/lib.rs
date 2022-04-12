@@ -18,7 +18,6 @@ use util::GameInstant;
 
 pub struct MainState {
     world: World,
-    current_level: IVec2,
     player: Player,
     egui_backend: EguiBackend,
     paused: bool,
@@ -27,6 +26,7 @@ pub struct MainState {
     paused_text: graphics::Text,
     input_bindings: input_binding::InputBinder,
     player_props_ui_visible: bool,
+    camera_position: Vec2,
 }
 
 impl MainState {
@@ -35,12 +35,15 @@ impl MainState {
         // FIXME: Wait until `GameResult` allows for any error instead of just `CustomError`
         let world = World::from_file(ctx, Path::new("/world/world.world")).unwrap();
         let current_level = ivec2(0, 0);
-        let player = Player::new(ctx, world.level(current_level).spawn_point, game_time)?;
+        let player = Player::new(
+            ctx,
+            world.level(current_level).unwrap().spawn_point,
+            game_time,
+        )?;
 
         Ok(MainState {
             player,
             world,
-            current_level,
             egui_backend: EguiBackend::new(ctx),
             paused: false,
             game_time,
@@ -54,19 +57,17 @@ impl MainState {
             paused_text: graphics::Text::new("Paused"),
             input_bindings: Default::default(),
             player_props_ui_visible: false,
+            camera_position: Vec2::ZERO,
         })
     }
 }
 
-impl event::EventHandler<ggez::GameError> for MainState {
+// FIXME: Wait for https://github.com/ggez/ggez/pull/1022 to have E = anyhow::Error
+impl event::EventHandler<GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         if !self.paused {
-            self.player.update(
-                ctx,
-                self.world.level(self.current_level),
-                self.game_time,
-                &self.input_bindings,
-            );
+            self.player
+                .update(ctx, &self.world, self.game_time, &self.input_bindings);
             self.game_time.add_unpaused_delta(timer::delta(ctx));
         }
 
@@ -84,9 +85,16 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         graphics::clear(ctx, [0.1, 0.2, 0.3, 1.0].into());
 
-        self.world
-            .level(self.current_level)
-            .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
+        let player_room_pos = self.world.tile_to_room_pos(self.player.position());
+        self.world.level(player_room_pos).unwrap().draw(
+            ctx,
+            graphics::DrawParam::default()
+                .dest(vec2(
+                    (player_room_pos.x * self.world.room_size().x * 18) as f32,
+                    (player_room_pos.y * self.world.room_size().y * 18) as f32,
+                ))
+                .scale([18., 18.]),
+        )?;
         self.player
             .draw(ctx, graphics::DrawParam::default().scale([18., 18.]))?;
 
@@ -178,8 +186,12 @@ impl event::EventHandler<ggez::GameError> for MainState {
         self.player
             .key_down_event(ctx, keycode, keymods, repeat, self.game_time);
         if keycode == event::KeyCode::R {
-            self.player
-                .teleport_to(self.world.level(self.current_level).spawn_point);
+            self.player.teleport_to(
+                self.world
+                    .level(self.world.tile_to_room_pos(self.player.position()))
+                    .unwrap()
+                    .spawn_point,
+            );
         }
         if keycode == event::KeyCode::Escape {
             self.paused = !self.paused;
