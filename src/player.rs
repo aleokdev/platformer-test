@@ -216,6 +216,10 @@ impl Player {
     ) {
         // Obtain frame & input data
         let x_input: f32 = input.axis(ctx, input_binding::Axis::Horizontal).value();
+        if input.action(input_binding::Action::Jump) == input_binding::ActionState::JustPressed {
+            self.pressed_jump = true;
+            self.jump_pressed_time = game_time;
+        }
         let pressing_jump = input.action(input_binding::Action::Jump).is_pressed();
         let delta = timer::delta(ctx).as_secs_f32();
 
@@ -358,20 +362,6 @@ impl Player {
         )?;
 
         Ok(())
-    }
-
-    pub fn key_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: event::KeyCode,
-        _keymods: event::KeyMods,
-        repeat: bool,
-        game_time: GameInstant,
-    ) {
-        if keycode == event::KeyCode::Space && !repeat {
-            self.pressed_jump = true;
-            self.jump_pressed_time = game_time;
-        }
     }
 
     pub fn teleport_to(&mut self, pos: Vec2) {

@@ -5,8 +5,9 @@ A platformer template made in Rust, using `ggez` as framework and `tiled` for lo
 May evolve into an engine at some point; This repo is going to serve as the base for one of my future projects.
 
 ## Controls
-A, D: Move left/right respectively
-Space: Jump (Hold to jump higher)
+Left & Right arrow keys OR left controller stick: Move left/right respectively
+Space OR south action button: Jump (Hold to jump higher)
+You can rebind these controls by modifying `assets/input.ron`.
 
 You can press Ctrl+I to bring up the player properties window.
 
@@ -29,14 +30,15 @@ a walljump.
 
 ### Controls
 - [x] Basic player movement
-- [ ] Control rebinding
-- [ ] Gamepad support
+- [x] Control rebinding
+- [x] Gamepad support
 
 ### Mechanics
 - [x] Simple AABB collision
 - [x] Multijump
 - [x] Sliding down walls
 - [x] Walljump
+- [ ] Platforms
 - [ ] Sticking to walls
 - [ ] Gravity switching
 

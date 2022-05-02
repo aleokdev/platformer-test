@@ -769,6 +769,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82605a2a3d13a9661b07ba27f39d00496aa347c9c236b1a3b8201c1b6d761408"
 dependencies = [
  "enum-map-derive",
+ "serde",
 ]
 
 [[package]]
@@ -966,6 +967,7 @@ dependencies = [
  "fnv",
  "gilrs-core",
  "log",
+ "serde",
  "uuid",
  "vec_map",
 ]
@@ -983,6 +985,7 @@ dependencies = [
  "log",
  "nix 0.23.1",
  "rusty-xinput",
+ "serde",
  "stdweb 0.4.20",
  "uuid",
  "vec_map",
@@ -1935,11 +1938,14 @@ dependencies = [
  "enum-map",
  "ggez",
  "ggez-egui",
+ "gilrs",
  "glam",
  "path-clean",
+ "ron",
  "serde",
  "serde_json",
  "tiled",
+ "winit",
 ]
 
 [[package]]
@@ -2143,6 +2149,17 @@ dependencies = [
  "hound",
  "lewton",
  "minimp3",
+]
+
+[[package]]
+name = "ron"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b861ecaade43ac97886a512b360d01d66be9f41f3c61088b42cedf92e03d678"
+dependencies = [
+ "base64",
+ "bitflags",
+ "serde",
 ]
 
 [[package]]
@@ -2814,6 +2831,7 @@ dependencies = [
  "percent-encoding",
  "raw-window-handle 0.3.4",
  "scopeguard",
+ "serde",
  "smithay-client-toolkit",
  "wayland-client",
  "winapi",

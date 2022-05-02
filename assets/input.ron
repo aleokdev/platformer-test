@@ -1,0 +1,30 @@
+(
+    actions: {
+        Jump: (
+            main: (
+                type: "Key",
+                key: "Space",
+                mods: []
+            ),
+            secondary: Some((
+                type: "GamepadButton",
+                id: "South"
+            ))
+        ),
+    },
+    axes: {
+        Horizontal: (
+            main: (
+                type: "KeyJoystick",
+                positive: "Right",
+                negative: "Left"
+            ),
+            secondary: Some((
+                type: "GamepadAxis",
+                id: 0,
+                axis: "LeftStickX",
+                deadzone: 0.1
+            ))
+        )
+    }
+)

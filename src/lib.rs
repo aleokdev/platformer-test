@@ -3,8 +3,9 @@ pub mod level;
 pub mod player;
 pub mod util;
 pub mod world;
-use std::path::Path;
+use std::{io::Read, path::Path};
 
+use input_binding::InputBinder;
 pub use level::{Level, LevelTile};
 pub use player::{Player, PlayerProperties};
 pub use world::World;
@@ -42,6 +43,23 @@ impl MainState {
             game_time,
         )?;
 
+        let read_input_bindings = || -> anyhow::Result<InputBinder> {
+            let mut input_file = filesystem::open(ctx, "/input.ron")?;
+            let mut input_binding_contents = String::new();
+            input_file.read_to_string(&mut input_binding_contents)?;
+            Ok(ron::from_str(&input_binding_contents)?)
+        };
+
+        let input_bindings = match read_input_bindings() {
+            Ok(bindings) => bindings,
+            Err(err) => {
+                eprintln!("Couldn't load input bindings; Error: {}", err);
+                Default::default()
+            }
+        };
+
+        dbg!(input::gamepad::gamepads(ctx).collect::<Vec<_>>());
+
         Ok(MainState {
             player,
             world,
@@ -56,7 +74,7 @@ impl MainState {
             )
             .unwrap(),
             paused_text: graphics::Text::new("Paused"),
-            input_bindings: Default::default(),
+            input_bindings,
             player_props_ui_visible: false,
             camera_position: Vec2::ZERO,
         })
@@ -180,6 +198,7 @@ impl event::EventHandler<GameError> for MainState {
         btn: event::Button,
         id: event::GamepadId,
     ) {
+        println!("Down btn {:?}", btn);
         self.input_bindings.gamepad_button_down_event(btn, id)
     }
 
@@ -189,6 +208,7 @@ impl event::EventHandler<GameError> for MainState {
         btn: event::Button,
         id: event::GamepadId,
     ) {
+        println!("Up btn {:?}", btn);
         self.input_bindings.gamepad_button_up_event(btn, id)
     }
 
@@ -219,8 +239,6 @@ impl event::EventHandler<GameError> for MainState {
         self.egui_backend.input.key_down_event(keycode, keymods);
         self.input_bindings.key_down_event(keycode, keymods, repeat);
 
-        self.player
-            .key_down_event(ctx, keycode, keymods, repeat, self.game_time);
         if keycode == event::KeyCode::R {
             self.player.teleport_to(
                 self.world

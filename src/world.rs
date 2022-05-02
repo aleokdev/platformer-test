@@ -81,8 +81,6 @@ impl World {
             }
         }
 
-        dbg!(&map);
-
         Ok(Self {
             levels,
             map,

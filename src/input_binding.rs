@@ -2,12 +2,15 @@ use std::collections::HashSet;
 
 use enum_map::{enum_map, Enum, EnumMap};
 use ggez::*;
+use serde::{de::Visitor, Deserialize, Deserializer};
 
 /// Triggers that have a state defined by an [ActionState] value.
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug, Deserialize)]
+#[serde(tag = "type")]
 pub enum DigitalTrigger {
     Key {
         key: input::keyboard::KeyCode,
+        #[serde(deserialize_with = "deserialize_keymods")]
         mods: input::keyboard::KeyMods,
     },
     MouseButton(input::mouse::MouseButton),
@@ -16,7 +19,50 @@ pub enum DigitalTrigger {
     },
 }
 
+fn deserialize_keymods<'de, D>(de: D) -> Result<input::keyboard::KeyMods, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct KeyModsVisitor;
+
+    impl<'de> Visitor<'de> for KeyModsVisitor {
+        type Value = input::keyboard::KeyMods;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter
+                .write_str(r#"a set containing any of the following: "Shift" "Ctrl" "Alt" "Logo" "#)
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut mods = input::keyboard::KeyMods::NONE;
+            while let Some(val) = seq.next_element::<String>()? {
+                match val.as_str() {
+                    "Shift" => mods |= input::keyboard::KeyMods::SHIFT,
+                    "Ctrl" => mods |= input::keyboard::KeyMods::CTRL,
+                    "Alt" => mods |= input::keyboard::KeyMods::ALT,
+                    "Logo" => mods |= input::keyboard::KeyMods::LOGO,
+                    other => {
+                        return Err(serde::de::Error::invalid_value(
+                            serde::de::Unexpected::Str(other),
+                            &self,
+                        ))
+                    }
+                }
+            }
+
+            Ok(mods)
+        }
+    }
+
+    de.deserialize_seq(KeyModsVisitor)
+}
+
 /// Triggers that have a state defined by a value in the `-1f32..1f32` range.
+#[derive(Deserialize)]
+#[serde(tag = "type")]
 pub enum AnalogTrigger {
     /// Emulates a real joystick axis with two keys.
     ///
@@ -28,7 +74,6 @@ pub enum AnalogTrigger {
         positive: input::keyboard::KeyCode,
     },
     GamepadAxis {
-        gamepad_id: input::gamepad::GamepadId,
         axis: input::gamepad::gilrs::Axis,
         deadzone: f32,
     },
@@ -47,16 +92,13 @@ impl AnalogTrigger {
                     (false, true) => 1.,
                 }
             }
-            AnalogTrigger::GamepadAxis {
-                gamepad_id,
-                axis,
-                deadzone,
-            } => {
-                let val = input::gamepad::gamepad(ctx, *gamepad_id)
-                    .axis_data(*axis)
-                    .unwrap()
-                    .value()
-                    / 100.;
+            AnalogTrigger::GamepadAxis { axis, deadzone } => {
+                let val = input::gamepad::gamepads(ctx)
+                    .next()
+                    .and_then(|(_id, gamepad)| gamepad.axis_data(*axis).copied())
+                    .map(|axis_data| axis_data.value())
+                    .unwrap_or(0.);
+
                 if &val.abs() < deadzone {
                     0.
                 } else {
@@ -67,13 +109,13 @@ impl AnalogTrigger {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
 #[non_exhaustive]
 pub enum Action {
     Jump,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub enum ActionState {
     Released,
     JustReleased,
@@ -81,7 +123,7 @@ pub enum ActionState {
     Held,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
 #[non_exhaustive]
 pub enum Axis {
     Horizontal,
@@ -150,7 +192,14 @@ impl DigitalTriggerRecord {
     }
 }
 
+impl Default for DigitalTriggerRecord {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A binding from an input source to an action.
+#[derive(Deserialize)]
 pub struct ActionBinding {
     main: DigitalTrigger,
     secondary: Option<DigitalTrigger>,
@@ -172,6 +221,7 @@ impl ActionBinding {
 }
 
 /// A binding from an input source to an axis.
+#[derive(Deserialize)]
 pub struct AxisBinding {
     main: AnalogTrigger,
     secondary: Option<AnalogTrigger>,
@@ -193,12 +243,20 @@ impl AxisBinding {
     }
 }
 
+#[derive(Deserialize)]
 pub struct InputBinder {
     actions: EnumMap<Action, ActionBinding>,
     axes: EnumMap<Axis, AxisBinding>,
 
+    #[serde(skip_deserializing)]
     trigger_record: DigitalTriggerRecord,
+    #[serde(skip_deserializing)]
+    #[serde(default = "true_val")]
     enabled: bool,
+}
+
+fn true_val() -> bool {
+    true
 }
 
 impl Default for InputBinder {
