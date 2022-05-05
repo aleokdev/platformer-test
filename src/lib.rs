@@ -1,14 +1,14 @@
 pub mod input_binding;
-pub mod level;
+pub mod physics;
 pub mod player;
 pub mod util;
 pub mod world;
-use std::{io::Read, path::Path};
 
 use input_binding::InputBinder;
-pub use level::{Level, LevelTile};
+use player::spawn_player;
 pub use player::{Player, PlayerProperties};
-pub use world::World;
+use world::GameWorld;
+pub use world::LdtkProject;
 
 use ggez::*;
 use glam::*;
@@ -17,19 +17,40 @@ use ggez_egui::*;
 
 use util::GameInstant;
 
-pub struct MainState {
+use bevy::{asset::AssetServerSettings, prelude::*};
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum AppState {
+    Loading,
+    Playing,
+}
+
+pub fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    input_bindings: ResMut<InputBinder>,
+) {
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.insert_resource(AssetServerSettings {
+        watch_for_changes: true,
+        ..default()
+    });
+    info!("Starting to load world file");
+    let ldtk: Handle<LdtkProject> = asset_server.load("world.ldtk");
+    spawn_player(&mut commands);
+    commands.insert_resource(GameWorld { ldtk });
+}
+
+pub struct Game {
     world: World,
-    player: Player,
-    egui_backend: EguiBackend,
     paused: bool,
-    game_time: GameInstant,
-    screen_rect_mesh: graphics::Mesh,
-    paused_text: graphics::Text,
-    input_bindings: input_binding::InputBinder,
     player_props_ui_visible: bool,
     camera_position: Vec2,
 }
 
+/*
 impl MainState {
     pub fn new(ctx: &mut Context) -> GameResult<MainState> {
         let game_time = GameInstant::from_game_start();
@@ -264,3 +285,4 @@ impl event::EventHandler<GameError> for MainState {
         self.egui_backend.input.resize_event(width, height);
     }
 }
+*/

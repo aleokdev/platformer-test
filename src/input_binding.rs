@@ -1,118 +1,52 @@
 use std::collections::HashSet;
 
+use bevy::{
+    input::{
+        gamepad::{AxisSettings, ButtonSettings, GamepadSettings},
+        keyboard::KeyboardInput,
+        mouse::MouseButtonInput,
+    },
+    prelude::*,
+    utils::HashMap,
+};
 use enum_map::{enum_map, Enum, EnumMap};
-use ggez::*;
-use serde::{de::Visitor, Deserialize, Deserializer};
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
+#[non_exhaustive]
+pub enum Action {
+    Jump,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
+#[non_exhaustive]
+pub enum Axis {
+    Horizontal,
+}
 
 /// Triggers that have a state defined by an [ActionState] value.
 #[derive(Clone, Hash, PartialEq, Eq, Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum DigitalTrigger {
-    Key {
-        key: input::keyboard::KeyCode,
-        #[serde(deserialize_with = "deserialize_keymods")]
-        mods: input::keyboard::KeyMods,
-    },
-    MouseButton(input::mouse::MouseButton),
-    GamepadButton {
-        id: input::gamepad::gilrs::Button,
-    },
-}
-
-fn deserialize_keymods<'de, D>(de: D) -> Result<input::keyboard::KeyMods, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct KeyModsVisitor;
-
-    impl<'de> Visitor<'de> for KeyModsVisitor {
-        type Value = input::keyboard::KeyMods;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter
-                .write_str(r#"a set containing any of the following: "Shift" "Ctrl" "Alt" "Logo" "#)
-        }
-
-        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: serde::de::SeqAccess<'de>,
-        {
-            let mut mods = input::keyboard::KeyMods::NONE;
-            while let Some(val) = seq.next_element::<String>()? {
-                match val.as_str() {
-                    "Shift" => mods |= input::keyboard::KeyMods::SHIFT,
-                    "Ctrl" => mods |= input::keyboard::KeyMods::CTRL,
-                    "Alt" => mods |= input::keyboard::KeyMods::ALT,
-                    "Logo" => mods |= input::keyboard::KeyMods::LOGO,
-                    other => {
-                        return Err(serde::de::Error::invalid_value(
-                            serde::de::Unexpected::Str(other),
-                            &self,
-                        ))
-                    }
-                }
-            }
-
-            Ok(mods)
-        }
-    }
-
-    de.deserialize_seq(KeyModsVisitor)
+    Key(KeyCode),
+    MouseButton(MouseButton),
+    GamepadButton(GamepadButton),
 }
 
 /// Triggers that have a state defined by a value in the `-1f32..1f32` range.
 #[derive(Deserialize)]
 #[serde(tag = "type")]
 pub enum AnalogTrigger {
-    /// Emulates a real joystick axis with two keys.
+    /// Emulates a real joystick axis with two [`DigitalTrigger`]s.
     ///
     /// - If `negative` is pressed, then its state will be -1.
     /// - If `positive` is pressed, then its state will be 1.
     /// - If both or none are pressed, then its state will be 0.
-    KeyJoystick {
-        negative: input::keyboard::KeyCode,
-        positive: input::keyboard::KeyCode,
+    DigitalJoystick {
+        negative: DigitalTrigger,
+        positive: DigitalTrigger,
     },
-    GamepadAxis {
-        axis: input::gamepad::gilrs::Axis,
-        deadzone: f32,
-    },
-}
-
-impl AnalogTrigger {
-    fn value(&self, ctx: &Context) -> AxisState {
-        AxisState(match self {
-            AnalogTrigger::KeyJoystick { negative, positive } => {
-                match (
-                    input::keyboard::is_key_pressed(ctx, *negative),
-                    input::keyboard::is_key_pressed(ctx, *positive),
-                ) {
-                    (true, true) | (false, false) => 0.,
-                    (true, false) => -1.,
-                    (false, true) => 1.,
-                }
-            }
-            AnalogTrigger::GamepadAxis { axis, deadzone } => {
-                let val = input::gamepad::gamepads(ctx)
-                    .next()
-                    .and_then(|(_id, gamepad)| gamepad.axis_data(*axis).copied())
-                    .map(|axis_data| axis_data.value())
-                    .unwrap_or(0.);
-
-                if &val.abs() < deadzone {
-                    0.
-                } else {
-                    val
-                }
-            }
-        })
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
-#[non_exhaustive]
-pub enum Action {
-    Jump,
+    GamepadAxis(GamepadAxis),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
@@ -123,13 +57,13 @@ pub enum ActionState {
     Held,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
-#[non_exhaustive]
-pub enum Axis {
-    Horizontal,
+impl ActionState {
+    pub fn is_pressed(self) -> bool {
+        matches!(self, Self::JustPressed | Self::Held)
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 pub struct AxisState(f32);
 
 impl AxisState {
@@ -138,25 +72,53 @@ impl AxisState {
     }
 }
 
-impl ActionState {
-    pub fn is_pressed(self) -> bool {
-        matches!(self, Self::JustPressed | Self::Held)
-    }
-}
-
-struct DigitalTriggerRecord {
+struct TriggerRecord {
     just_pressed: HashSet<DigitalTrigger>,
     held: HashSet<DigitalTrigger>,
     just_released: HashSet<DigitalTrigger>,
+
+    axis_values: HashMap<GamepadAxis, AxisState>,
 }
 
-impl DigitalTriggerRecord {
+impl TriggerRecord {
     fn new() -> Self {
         Self {
             just_pressed: HashSet::new(),
             held: HashSet::new(),
             just_released: HashSet::new(),
+
+            axis_values: Default::default(),
         }
+    }
+
+    fn update_gamepad_button(&mut self, b: GamepadButton, state: f32, settings: &ButtonSettings) {
+        let trigger = DigitalTrigger::GamepadButton(b);
+        match state {
+            state if state > settings.press => {
+                // Pressed
+                if !self.held.contains(&trigger) {
+                    self.press(trigger);
+                }
+            }
+            state if state < settings.release => {
+                // Released
+                if self.held.contains(&trigger) {
+                    self.release(trigger);
+                }
+            }
+            _ => return,
+        };
+    }
+
+    fn update_gamepad_axis(&mut self, a: GamepadAxis, state: f32, settings: &AxisSettings) {
+        let val = match state {
+            state if state > settings.positive_high => 1.0,
+            state if state < settings.negative_high => -1.0,
+            state if state > settings.negative_low && state < settings.positive_low => 0.0,
+            // Threshold shouldn't be our problem
+            _ => state,
+        };
+        self.axis_values.insert(a, AxisState(val));
     }
 
     fn press(&mut self, trigger: DigitalTrigger) {
@@ -165,9 +127,7 @@ impl DigitalTriggerRecord {
 
     fn release(&mut self, trigger: DigitalTrigger) {
         self.held.retain(|x| match (x, &trigger) {
-            (DigitalTrigger::Key { key: l_key, .. }, DigitalTrigger::Key { key: r_key, .. }) => {
-                l_key != r_key
-            }
+            (DigitalTrigger::Key(l_key), DigitalTrigger::Key(r_key)) => l_key != r_key,
             _ => x != &trigger,
         });
         self.just_released.insert(trigger);
@@ -192,7 +152,7 @@ impl DigitalTriggerRecord {
     }
 }
 
-impl Default for DigitalTriggerRecord {
+impl Default for TriggerRecord {
     fn default() -> Self {
         Self::new()
     }
@@ -201,21 +161,23 @@ impl Default for DigitalTriggerRecord {
 /// A binding from an input source to an action.
 #[derive(Deserialize)]
 pub struct ActionBinding {
-    main: DigitalTrigger,
+    primary: DigitalTrigger,
     secondary: Option<DigitalTrigger>,
 }
 
 impl ActionBinding {
-    pub fn new(main: DigitalTrigger, secondary: Option<DigitalTrigger>) -> Self {
-        Self { main, secondary }
+    pub fn new(primary: DigitalTrigger, secondary: Option<DigitalTrigger>) -> Self {
+        Self { primary, secondary }
     }
 
-    fn state(&self, record: &DigitalTriggerRecord) -> ActionState {
-        let main_state = record.state(&self.main);
+    fn state(&self, record: &TriggerRecord) -> ActionState {
+        let primary_state = record.state(&self.primary);
         let secondary_state = self.secondary.as_ref().map(|trigger| record.state(trigger));
-        match (main_state, secondary_state) {
-            (main_state, None) => main_state,
-            (main_state, Some(secondary_state)) => ActionState::max(main_state, secondary_state),
+        match (primary_state, secondary_state) {
+            (primary_state, None) => primary_state,
+            (primary_state, Some(secondary_state)) => {
+                ActionState::max(primary_state, secondary_state)
+            }
         }
     }
 }
@@ -223,23 +185,13 @@ impl ActionBinding {
 /// A binding from an input source to an axis.
 #[derive(Deserialize)]
 pub struct AxisBinding {
-    main: AnalogTrigger,
+    primary: AnalogTrigger,
     secondary: Option<AnalogTrigger>,
 }
 
 impl AxisBinding {
-    pub fn new(main: AnalogTrigger, secondary: Option<AnalogTrigger>) -> Self {
-        Self { main, secondary }
-    }
-
-    fn state(&self, ctx: &Context) -> AxisState {
-        let main_state = self.main.value(ctx);
-        let secondary_state = self.secondary.as_ref().map(|trigger| trigger.value(ctx));
-        match (main_state, secondary_state) {
-            (main_state, None) => main_state,
-            (main_state, Some(secondary_state)) if main_state.value() == 0. => secondary_state,
-            (main_state, Some(_)) => main_state,
-        }
+    pub fn new(primary: AnalogTrigger, secondary: Option<AnalogTrigger>) -> Self {
+        Self { primary, secondary }
     }
 }
 
@@ -249,14 +201,7 @@ pub struct InputBinder {
     axes: EnumMap<Axis, AxisBinding>,
 
     #[serde(skip_deserializing)]
-    trigger_record: DigitalTriggerRecord,
-    #[serde(skip_deserializing)]
-    #[serde(default = "true_val")]
-    enabled: bool,
-}
-
-fn true_val() -> bool {
-    true
+    trigger_record: TriggerRecord,
 }
 
 impl Default for InputBinder {
@@ -264,94 +209,165 @@ impl Default for InputBinder {
         Self {
             actions: enum_map! {
                 Action::Jump => ActionBinding::new(
-                        DigitalTrigger::Key{
-                            key: input::keyboard::KeyCode::Space,
-                            mods: input::keyboard::KeyMods::default()
-                        }, Some(DigitalTrigger::GamepadButton{id: ggez::event::Button::South})
+                        DigitalTrigger::Key(KeyCode::Space), Some(DigitalTrigger::GamepadButton(GamepadButton(Gamepad(0), GamepadButtonType::South)))
                 ),
             },
             axes: enum_map! {
                 Axis::Horizontal => AxisBinding::new(
-                    AnalogTrigger::KeyJoystick{
-                        negative: input::keyboard::KeyCode::A,
-                        positive: input::keyboard::KeyCode::D
+                    AnalogTrigger::DigitalJoystick{
+                        negative: DigitalTrigger::Key(KeyCode::A),
+                        positive: DigitalTrigger::Key(KeyCode::D),
                     },
                     None
                 ),
             },
 
-            trigger_record: DigitalTriggerRecord::new(),
-
-            enabled: true,
+            trigger_record: TriggerRecord::new(),
         }
     }
 }
 
 impl InputBinder {
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
+    pub fn load_from_str(&mut self, string: &str) -> Result<(), ron::Error> {
+        *self = ron::from_str(string)?;
+        Ok(())
     }
 
-    pub fn key_down_event(
-        &mut self,
-        keycode: event::KeyCode,
-        keymods: event::KeyMods,
-        repeat: bool,
-    ) {
-        if !repeat {
-            self.trigger_record.press(DigitalTrigger::Key {
-                key: keycode,
-                mods: keymods,
-            });
+    pub fn axis_value(&self, axis: Axis) -> AxisState {
+        let bindings: &AxisBinding = &self.axes[axis];
+        self.analog_trigger_value(&bindings.primary)
+            .or_else(|| {
+                bindings
+                    .secondary
+                    .as_ref()
+                    .and_then(|secondary| self.analog_trigger_value(secondary))
+            })
+            .unwrap_or_default()
+    }
+
+    fn analog_trigger_value(&self, trigger: &AnalogTrigger) -> Option<AxisState> {
+        match trigger {
+            AnalogTrigger::DigitalJoystick { negative, positive } => {
+                let is_negative_pressed = self.trigger_record.state(&negative).is_pressed();
+                let is_positive_pressed = self.trigger_record.state(&positive).is_pressed();
+                match (is_negative_pressed, is_positive_pressed) {
+                    (true, false) => Some(AxisState(-1.0)),
+                    (false, true) => Some(AxisState(1.0)),
+                    _ => None,
+                }
+            }
+            AnalogTrigger::GamepadAxis(axis) => {
+                let val = self.trigger_record.axis_values[axis];
+                if val.value() == 0.0 {
+                    None
+                } else {
+                    Some(val)
+                }
+            }
         }
     }
 
-    pub fn key_up_event(&mut self, keycode: event::KeyCode, keymods: event::KeyMods) {
-        self.trigger_record.release(DigitalTrigger::Key {
-            key: keycode,
-            mods: keymods,
-        });
-    }
+    pub fn action_value(&self, action: Action) -> ActionState {
+        let bindings: &ActionBinding = &self.actions[action];
 
-    pub fn mouse_button_down_event(&mut self, button: input::mouse::MouseButton) {
-        self.trigger_record
-            .press(DigitalTrigger::MouseButton(button));
-    }
+        let primary = self.trigger_record.state(&bindings.primary);
 
-    pub fn mouse_button_up_event(&mut self, button: input::mouse::MouseButton) {
-        self.trigger_record
-            .release(DigitalTrigger::MouseButton(button));
-    }
+        let secondary = bindings
+            .secondary
+            .as_ref()
+            .map(|secondary| self.trigger_record.state(secondary));
 
-    pub fn gamepad_button_down_event(&mut self, btn: event::Button, _id: event::GamepadId) {
-        self.trigger_record
-            .press(DigitalTrigger::GamepadButton { id: btn });
-    }
-
-    pub fn gamepad_button_up_event(&mut self, btn: event::Button, _id: event::GamepadId) {
-        self.trigger_record
-            .release(DigitalTrigger::GamepadButton { id: btn });
-    }
-
-    /// Convert "just pressed" triggers to held ones and clear "just released" triggers
-    pub fn finish_frame(&mut self) {
-        self.trigger_record.finish_frame();
-    }
-
-    pub fn action(&self, action: Action) -> ActionState {
-        // HACK: This will not send [ActionState::JustReleased] if the input binder is disabled while holding a trigger
-        if self.enabled {
-            self.actions[action].state(&self.trigger_record)
+        if let Some(secondary) = secondary {
+            primary.max(secondary)
         } else {
-            ActionState::Released
+            primary
         }
     }
+}
 
-    pub fn axis(&self, ctx: &Context, axis: Axis) -> AxisState {
-        if self.enabled {
-            self.axes[axis].state(ctx)
-        } else {
-            AxisState(0.)
+fn update_mouse_input(
+    mut input_binder: ResMut<InputBinder>,
+    mut events: EventReader<MouseButtonInput>,
+) {
+    for event in events.iter() {
+        let trigger = DigitalTrigger::MouseButton(event.button);
+        match event.state {
+            bevy::input::ElementState::Pressed => input_binder.trigger_record.press(trigger),
+            bevy::input::ElementState::Released => input_binder.trigger_record.release(trigger),
         }
+    }
+}
+
+fn update_keyboard_input(
+    mut input_binder: ResMut<InputBinder>,
+    mut events: EventReader<KeyboardInput>,
+) {
+    for (state, keycode) in events
+        .iter()
+        .filter_map(|event| event.key_code.map(|keycode| (event.state, keycode)))
+    {
+        let trigger = DigitalTrigger::Key(keycode);
+        match state {
+            bevy::input::ElementState::Pressed => input_binder.trigger_record.press(trigger),
+            bevy::input::ElementState::Released => input_binder.trigger_record.release(trigger),
+        }
+    }
+}
+
+fn update_gamepad_input(
+    mut input_binder: ResMut<InputBinder>,
+    settings: Res<GamepadSettings>,
+    mut events: EventReader<GamepadEvent>,
+) {
+    for event in events.iter() {
+        match event.1 {
+            GamepadEventType::Connected => (),
+            GamepadEventType::Disconnected => (),
+            GamepadEventType::ButtonChanged(ty, state) => {
+                let button = GamepadButton(event.0, ty);
+                input_binder.trigger_record.update_gamepad_button(
+                    button,
+                    state,
+                    settings.get_button_settings(button),
+                );
+            }
+            GamepadEventType::AxisChanged(ty, state) => {
+                let axis = GamepadAxis(event.0, ty);
+                input_binder.trigger_record.update_gamepad_axis(
+                    axis,
+                    state,
+                    settings.get_axis_settings(axis),
+                );
+            }
+        }
+    }
+}
+
+fn update_trigger_record(mut input_binder: ResMut<InputBinder>) {
+    input_binder.trigger_record.finish_frame();
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+struct InputBindStage;
+impl StageLabel for InputBindStage {
+    fn dyn_clone(&self) -> std::boxed::Box<(dyn bevy::prelude::StageLabel + 'static)> {
+        Box::new(self.clone())
+    }
+}
+
+pub struct InputBindingPlugin;
+
+impl Plugin for InputBindingPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<InputBinder>()
+            .add_stage_after(
+                CoreStage::PreUpdate,
+                InputBindStage,
+                SystemStage::parallel(),
+            )
+            .add_system_to_stage(InputBindStage, update_mouse_input)
+            .add_system_to_stage(InputBindStage, update_keyboard_input)
+            .add_system_to_stage(InputBindStage, update_gamepad_input)
+            .add_system_to_stage(CoreStage::Last, update_trigger_record);
     }
 }

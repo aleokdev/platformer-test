@@ -1,11 +1,15 @@
 use std::time::Duration;
 
-use crate::{input_binding, World};
-use ggez::*;
+use crate::{
+    input_binding::{self, InputBinder},
+    physics::{
+        KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody, Velocity,
+    },
+    World,
+};
+use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
 use ggez_egui::egui;
-use glam::{ivec2, vec2, IVec2, Vec2};
-
-use crate::{util::GameInstant, LevelTile};
+use glam::{ivec2, vec2, vec3, IVec2, Vec2};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -175,366 +179,250 @@ pub enum State {
     Sliding { side: SlideSide },
 }
 
-pub struct Player {
-    position: Vec2,
-    velocity: Vec2,
-    pub properties: PlayerProperties,
-    image: graphics::Image,
-
-    state: State,
-    pressed_jump: bool,
-    can_jump: bool,
-    jump_pressed_time: GameInstant,
-    last_grounded_time: GameInstant,
-    last_walljump_time: GameInstant,
-    times_jumped_since_grounded: u32,
+impl Default for State {
+    fn default() -> Self {
+        State::Airborne
+    }
 }
 
-impl Player {
-    pub fn new(ctx: &mut Context, position: Vec2, now: GameInstant) -> GameResult<Self> {
-        Ok(Self {
-            position,
-            velocity: vec2(0., 0.),
-            properties: Default::default(),
-            image: graphics::Image::solid(ctx, 1, graphics::Color::WHITE)?,
-            state: State::Airborne,
-            pressed_jump: false,
-            jump_pressed_time: now,
-            last_grounded_time: now,
-            last_walljump_time: now,
-            can_jump: false,
-            times_jumped_since_grounded: 0,
-        })
-    }
+#[derive(Component, Default)]
+pub struct Player {
+    state: State,
+    properties: PlayerProperties,
 
-    pub fn update(
-        &mut self,
-        ctx: &Context,
-        world: &World,
-        game_time: GameInstant,
-        input: &input_binding::InputBinder,
-    ) {
-        // Obtain frame & input data
-        let x_input: f32 = input.axis(ctx, input_binding::Axis::Horizontal).value();
-        if input.action(input_binding::Action::Jump) == input_binding::ActionState::JustPressed {
-            self.pressed_jump = true;
-            self.jump_pressed_time = game_time;
-        }
-        let pressing_jump = input.action(input_binding::Action::Jump).is_pressed();
-        let delta = timer::delta(ctx).as_secs_f32();
+    pressed_jump: bool,
+    can_jump: bool,
+    jump_pressed_time: Duration,
+    last_grounded_time: Duration,
+    last_walljump_time: Duration,
+    times_jumped_since_grounded: u32,
+    left_side_sensor: Option<Entity>,
+    right_side_sensor: Option<Entity>,
+}
 
-        // Apply gravity
-        self.velocity.y += if pressing_jump && self.velocity.y < 0. {
-            self.properties.jump_gravity
-        } else {
-            self.properties.gravity
-        } * delta;
-        if f32::abs(self.velocity.y) > self.properties.terminal_speed {
-            self.velocity.y = self.properties.terminal_speed * self.velocity.y.signum();
-        }
+#[derive(Bundle)]
+pub struct PlayerBundle {
+    #[bundle]
+    sprite: SpriteBundle,
+    velocity: Velocity,
+    body: KinematicBody,
+    player: Player,
+    collision: RectCollision,
+}
 
-        // Clamp velocity if sliding down wall
-        if matches!(self.state, State::Sliding { .. }) {
-            if let Some(wallslide_max_v_speed) = self.properties.wallslide_max_v_speed {
-                self.velocity.y = self.velocity.y.clamp(-f32::INFINITY, wallslide_max_v_speed);
-            }
-        }
-
-        if x_input == 0. {
-            // Apply horizontal decceleration
-            let decceleration = match self.state {
-                State::Grounded => self.properties.ground_decceleration,
-                State::Airborne => self.properties.air_decceleration,
-                State::Sliding { .. } => 0.,
-            } * delta;
-
-            if f32::abs(self.velocity.x) > decceleration {
-                self.velocity.x += if self.velocity.x > 0. {
-                    -decceleration
-                } else {
-                    decceleration
-                };
-            } else {
-                self.velocity.x = 0.;
-            }
-        } else if game_time > self.last_walljump_time + self.properties.dead_time_after_walljump {
-            // Apply horizontal acceleration
-            let acceleration = if x_input.signum() != self.velocity.x.signum() {
-                match self.state {
-                    State::Grounded => self.properties.ground_direction_change_acceleration,
-                    State::Airborne | State::Sliding { .. } => {
-                        self.properties.air_direction_change_acceleration
-                    }
-                }
-            } else {
-                match self.state {
-                    State::Grounded => self.properties.ground_acceleration,
-                    State::Airborne | State::Sliding { .. } => self.properties.air_acceleration,
-                }
-            } * delta;
-
-            self.velocity.x += x_input * acceleration;
-
-            if f32::abs(self.velocity.x) > self.properties.max_run_speed {
-                self.velocity.x = self.properties.max_run_speed * self.velocity.x.signum();
-            }
-        }
-
-        match self.state {
-            State::Grounded => {
-                if self.properties.jumps_available > 0 {
-                    self.can_jump = true;
-                }
-                self.times_jumped_since_grounded = 0;
-                self.last_grounded_time = game_time;
-            }
-            State::Airborne
-                if self.times_jumped_since_grounded == 0
-                    && game_time > self.last_grounded_time + self.properties.coyote_time =>
-            {
-                // If didn't jump after coyote time is over, mark it as one jump done
-                if self.properties.jumps_available == 1 {
-                    self.can_jump = false;
-                } else {
-                    self.times_jumped_since_grounded += 1;
-                }
-            }
-            _ => (),
-        }
-
-        // Handle jumping/walljumping
-        if self.pressed_jump {
-            match (self.properties.can_walljump, self.state) {
-                (true, State::Sliding { side }) => {
-                    self.pressed_jump = false;
-                    self.last_walljump_time = game_time;
-
-                    self.velocity.y = -self.properties.walljump_vertical_force;
-                    self.velocity.x = match side {
-                        SlideSide::Left => self.properties.walljump_horizontal_force,
-                        SlideSide::Right => -self.properties.walljump_horizontal_force,
-                    };
-                }
-                _ if self.can_jump => {
-                    self.pressed_jump = false;
-
-                    self.velocity.y = -self.properties.jump_force
-                        * self
-                            .properties
-                            .multijump_coefficient
-                            .powi(self.times_jumped_since_grounded as i32);
-
-                    self.times_jumped_since_grounded += 1;
-                    if self.properties.jumps_available <= self.times_jumped_since_grounded {
-                        self.can_jump = false;
-                    }
-                }
-                _ => (),
-            }
-
-            // Reset jump buffer if appropiate
-            if game_time > self.jump_pressed_time + self.properties.jump_buffer_time {
-                self.pressed_jump = false;
-            }
-        }
-
-        self.try_move(self.velocity * delta, world);
-    }
-
-    pub fn collision_rect(&self) -> graphics::Rect {
-        graphics::Rect {
-            x: self.position.x,
-            y: self.position.y,
-            w: 1.,
-            h: 1.,
-        }
-    }
-
-    pub fn draw(&self, ctx: &mut Context, draw_param: graphics::DrawParam) -> GameResult {
-        graphics::draw(
-            ctx,
-            &self.image,
-            draw_param.dest(self.position).color(match self.state {
-                State::Grounded => graphics::Color::RED,
-                State::Airborne => graphics::Color::WHITE,
-                State::Sliding { .. } => graphics::Color::GREEN,
-            }),
-        )?;
-
-        Ok(())
-    }
-
-    pub fn teleport_to(&mut self, pos: Vec2) {
-        self.position = pos;
-        self.velocity = vec2(0., 0.);
-    }
-
-    /// Get the player's position.
-    pub fn position(&self) -> Vec2 {
-        self.position
-    }
-
-    fn try_move(&mut self, mut to_move: Vec2, world: &World) {
-        if to_move.x == 0. && to_move.y == 0. {
-            return;
-        }
-        if self.state == State::Grounded {
-            self.state = State::Airborne;
-        }
-
-        fn calculate_delta_step(delta: Vec2) -> Vec2 {
-            const MAX_STEP_LENGTH: f32 = 0.1;
-            let delta_len = delta.length();
-            if delta_len <= MAX_STEP_LENGTH {
-                delta
-            } else {
-                delta / delta.length() * MAX_STEP_LENGTH
-            }
-        }
-
-        let mut step = calculate_delta_step(to_move);
-
-        while to_move.length() >= step.length() {
-            let last_position = self.position;
-            self.position += step;
-            to_move -= step;
-
-            if self.is_colliding(world) {
-                // Move one axis at a time to figure out where/how the collision happened
-                self.position.x = last_position.x;
-                if !self.is_colliding(world) {
-                    // Not colliding when moved back on the X axis, the player was blocked by a wall
-                    if matches!(self.state, State::Airborne) {
-                        self.state = if self.velocity.x > 0. {
-                            State::Sliding {
-                                side: SlideSide::Right,
-                            }
-                        } else {
-                            State::Sliding {
-                                side: SlideSide::Left,
-                            }
-                        };
-                    }
-
-                    self.velocity.x = 0.;
-                    to_move.x = 0.;
-                } else {
-                    self.position.x += step.x;
-                    self.position.y = last_position.y;
-                    if !self.is_colliding(world) {
-                        // Not colliding when moved back on the Y axis, the player was blocked by
-                        // the ground/ceiling
-                        if self.velocity.y > 0. {
-                            self.state = State::Grounded;
-                        }
-                        self.velocity.y = 0.;
-                        to_move.y = 0.;
-                    } else {
-                        // Colliding in both axes; Stop all movement
-                        self.position = last_position;
-                        self.state = if self.velocity.y > 0. {
-                            State::Grounded
-                        } else {
-                            if self.velocity.x > 0. {
-                                State::Sliding {
-                                    side: SlideSide::Right,
-                                }
-                            } else {
-                                State::Sliding {
-                                    side: SlideSide::Left,
-                                }
-                            }
-                        };
-                        self.velocity = Vec2::ZERO;
-                        return;
-                    }
-                }
-
-                if to_move == Vec2::ZERO {
-                    break;
-                } else {
-                    step = calculate_delta_step(to_move);
-                }
-            }
-        }
-
-        match (self.state, self.velocity.x) {
-            (
-                State::Sliding {
-                    side: SlideSide::Left,
-                },
-                vx,
-            ) if vx > 0. => self.state = State::Airborne,
-            (
-                State::Sliding {
-                    side: SlideSide::Right,
-                },
-                vx,
-            ) if vx < 0. => self.state = State::Airborne,
-            (State::Sliding { .. }, ..) => match self.get_side_sliding_from(world) {
-                Some(actual_side) => {
-                    self.state = State::Sliding { side: actual_side };
-                }
-                None => self.state = State::Airborne,
+impl Default for PlayerBundle {
+    fn default() -> Self {
+        Self {
+            sprite: Default::default(),
+            velocity: Default::default(),
+            body: Default::default(),
+            player: Default::default(),
+            collision: RectCollision {
+                rect: Rect::from_min_size(vec2(0., 0.), vec2(1., 1.)),
             },
+        }
+    }
+}
+
+#[derive(Bundle)]
+struct PlayerSideCollisionCheckerBundle {
+    global_transform: GlobalTransform,
+    transform: Transform,
+    collision: RectCollision,
+    body: SensorBody,
+}
+
+impl Default for PlayerSideCollisionCheckerBundle {
+    fn default() -> Self {
+        Self {
+            global_transform: Default::default(),
+            transform: Default::default(),
+            collision: RectCollision {
+                rect: Rect::from_min_size(vec2(0., 0.), vec2(1., 1.)),
+            },
+            body: Default::default(),
+        }
+    }
+}
+
+impl PlayerSideCollisionCheckerBundle {
+    pub fn left() -> Self {
+        Self {
+            transform: Transform::from_xyz(-0.1, 0., 0.),
+            ..default()
+        }
+    }
+    pub fn right() -> Self {
+        Self {
+            transform: Transform::from_xyz(0.1, 0., 0.),
+            ..default()
+        }
+    }
+}
+
+pub fn spawn_player(commands: &mut Commands) {
+    let mut left_id = None;
+    let mut right_id = None;
+    commands
+        .spawn_bundle(PlayerBundle::default())
+        .with_children(|children| {
+            left_id = Some(
+                children
+                    .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
+                    .id(),
+            );
+            right_id = Some(
+                children
+                    .spawn_bundle(PlayerSideCollisionCheckerBundle::right())
+                    .id(),
+            );
+        })
+        .insert(Player {
+            left_side_sensor: Some(left_id.unwrap()),
+            right_side_sensor: Some(right_id.unwrap()),
+            ..default()
+        });
+}
+
+#[derive(Deref)]
+pub struct GameplayTime(pub Stopwatch);
+
+pub fn update_player(
+    game_time: Res<Time>,
+    gameplay_time: Res<GameplayTime>,
+    input: Res<InputBinder>,
+    mut player: Query<(&mut Transform, &mut Velocity, &mut Player)>,
+) {
+    let (transform, mut velocity, mut player) = player.single_mut();
+    let unpaused_time = gameplay_time.elapsed();
+    // Obtain frame & input data
+    let x_input: f32 = input.axis_value(input_binding::Axis::Horizontal).value();
+    if input.action_value(input_binding::Action::Jump) == input_binding::ActionState::JustPressed {
+        player.pressed_jump = true;
+        player.jump_pressed_time = unpaused_time;
+    }
+    let pressing_jump = input.action_value(input_binding::Action::Jump).is_pressed();
+    let delta = game_time.delta_seconds();
+
+    // Apply gravity
+    velocity.y += if pressing_jump && velocity.y < 0. {
+        player.properties.jump_gravity
+    } else {
+        player.properties.gravity
+    } * delta;
+    if f32::abs(velocity.y) > player.properties.terminal_speed {
+        velocity.y = player.properties.terminal_speed * velocity.y.signum();
+    }
+
+    // Clamp velocity if sliding down wall
+    if matches!(player.state, State::Sliding { .. }) {
+        if let Some(wallslide_max_v_speed) = player.properties.wallslide_max_v_speed {
+            velocity.y = velocity.y.clamp(-f32::INFINITY, wallslide_max_v_speed);
+        }
+    }
+
+    if x_input == 0. {
+        // Apply horizontal decceleration
+        let decceleration = match player.state {
+            State::Grounded => player.properties.ground_decceleration,
+            State::Airborne => player.properties.air_decceleration,
+            State::Sliding { .. } => 0.,
+        } * delta;
+
+        if f32::abs(velocity.x) > decceleration {
+            velocity.x += if velocity.x > 0. {
+                -decceleration
+            } else {
+                decceleration
+            };
+        } else {
+            velocity.x = 0.;
+        }
+    } else if unpaused_time > player.last_walljump_time + player.properties.dead_time_after_walljump
+    {
+        // Apply horizontal acceleration
+        let acceleration = if x_input.signum() != velocity.x.signum() {
+            match player.state {
+                State::Grounded => player.properties.ground_direction_change_acceleration,
+                State::Airborne | State::Sliding { .. } => {
+                    player.properties.air_direction_change_acceleration
+                }
+            }
+        } else {
+            match player.state {
+                State::Grounded => player.properties.ground_acceleration,
+                State::Airborne | State::Sliding { .. } => player.properties.air_acceleration,
+            }
+        } * delta;
+
+        velocity.x += x_input * acceleration;
+
+        if f32::abs(velocity.x) > player.properties.max_run_speed {
+            velocity.x = player.properties.max_run_speed * velocity.x.signum();
+        }
+    }
+
+    match player.state {
+        State::Grounded => {
+            if player.properties.jumps_available > 0 {
+                player.can_jump = true;
+            }
+            player.times_jumped_since_grounded = 0;
+            player.last_grounded_time = game_time.time_since_startup();
+        }
+        State::Airborne
+            if player.times_jumped_since_grounded == 0
+                && unpaused_time > player.last_grounded_time + player.properties.coyote_time =>
+        {
+            // If didn't jump after coyote time is over, mark it as one jump done
+            if player.properties.jumps_available == 1 {
+                player.can_jump = false;
+            } else {
+                player.times_jumped_since_grounded += 1;
+            }
+        }
+        _ => (),
+    }
+
+    // Handle jumping/walljumping
+    if player.pressed_jump {
+        match (player.properties.can_walljump, player.state) {
+            (true, State::Sliding { side }) => {
+                player.pressed_jump = false;
+                player.last_walljump_time = unpaused_time;
+
+                velocity.y = -player.properties.walljump_vertical_force;
+                velocity.x = match side {
+                    SlideSide::Left => player.properties.walljump_horizontal_force,
+                    SlideSide::Right => -player.properties.walljump_horizontal_force,
+                };
+            }
+            _ if player.can_jump => {
+                player.pressed_jump = false;
+
+                velocity.y = -player.properties.jump_force
+                    * player
+                        .properties
+                        .multijump_coefficient
+                        .powi(player.times_jumped_since_grounded as i32);
+
+                player.times_jumped_since_grounded += 1;
+                if player.properties.jumps_available <= player.times_jumped_since_grounded {
+                    player.can_jump = false;
+                }
+            }
             _ => (),
         }
-    }
 
-    fn is_colliding(&self, world: &World) -> bool {
-        let col = self.collision_rect();
-        let tiles_to_check = [
-            floor(col.point().into()),
-            floor(vec2(col.x + col.w, col.y)),
-            floor(vec2(col.x, col.y + col.h)),
-            floor(vec2(col.x + col.w, col.y + col.h)),
-        ];
-
-        tiles_to_check
-            .into_iter()
-            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
-    }
-
-    fn get_side_sliding_from(&self, world: &World) -> Option<SlideSide> {
-        const DISTANCE_TO_WALL_REQUIRED_TO_SLIDE: f32 = 0.1;
-        let col = self.collision_rect();
-        let left_checks = [
-            floor(vec2(col.x - DISTANCE_TO_WALL_REQUIRED_TO_SLIDE, col.y)),
-            floor(vec2(
-                col.x - DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
-                col.y + col.h,
-            )),
-        ];
-        let right_checks = [
-            floor(vec2(
-                col.x + col.w + DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
-                col.y,
-            )),
-            floor(vec2(
-                col.x + col.w + DISTANCE_TO_WALL_REQUIRED_TO_SLIDE,
-                col.y + col.h,
-            )),
-        ];
-
-        if left_checks
-            .into_iter()
-            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
-        {
-            Some(SlideSide::Left)
-        } else if right_checks
-            .into_iter()
-            .any(|pos| matches!(world.get_tile(pos), Some(LevelTile::Solid)))
-        {
-            Some(SlideSide::Right)
-        } else {
-            None
+        // Reset jump buffer if appropiate
+        if unpaused_time > player.jump_pressed_time + player.properties.jump_buffer_time {
+            player.pressed_jump = false;
         }
     }
+}
 
-    /// Get the player's velocity.
-    pub fn velocity(&self) -> Vec2 {
-        self.velocity
-    }
+pub fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
+    if let Ok((mut player, collisions)) = query.get_single_mut() {}
 }
 
 fn floor(point: Vec2) -> IVec2 {

@@ -1,8 +1,8 @@
 # Platformer test
 ![Screenshot](Screenshot.png)
-A platformer template made in Rust, using `ggez` as framework and `tiled` for loading levels.
+A platformer template made in Rust, using `bevy` as its engine and `ldtk_rust` for loading levels.
 
-May evolve into an engine at some point; This repo is going to serve as the base for one of my future projects.
+May evolve into a game at some point; This repo is going to serve as the base for one of my future projects.
 
 ## Controls
 Left & Right arrow keys OR left controller stick: Move left/right respectively
