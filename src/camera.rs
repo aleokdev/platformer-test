@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 #[derive(Component)]
 pub struct SmoothFollow {
-    target: Option<Entity>,
-    multiplier: f32,
+    pub target: Option<Entity>,
+    pub multiplier: f32,
 }
 
 impl Default for SmoothFollow {
@@ -35,6 +35,7 @@ pub fn follow(
             let current_translation = transform.translation;
             transform.translation +=
                 (target_transform.translation - current_translation) * follow.multiplier * delta;
+            transform.translation.z = current_translation.z;
         }
     }
 }

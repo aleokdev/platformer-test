@@ -260,7 +260,7 @@ impl PlayerSideCollisionCheckerBundle {
     }
 }
 
-pub fn spawn_player(commands: &mut Commands) {
+pub fn spawn_player(commands: &mut Commands) -> Entity {
     let mut left_id = None;
     let mut right_id = None;
     commands
@@ -281,7 +281,8 @@ pub fn spawn_player(commands: &mut Commands) {
             left_side_sensor: Some(left_id.unwrap()),
             right_side_sensor: Some(right_id.unwrap()),
             ..default()
-        });
+        })
+        .id()
 }
 
 pub struct PlayerPlugin;

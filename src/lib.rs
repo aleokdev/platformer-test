@@ -21,7 +21,10 @@ use util::GameInstant;
 
 use bevy::{asset::AssetServerSettings, prelude::*, render::camera::ScalingMode};
 
-use crate::world::{LevelBundle, LevelId};
+use crate::{
+    camera::SmoothFollow,
+    world::{LevelBundle, LevelId},
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum AppState {
@@ -34,14 +37,20 @@ pub fn setup(
     asset_server: Res<AssetServer>,
     mut input_bindings: ResMut<InputBinder>,
 ) {
-    commands.spawn_bundle(OrthographicCameraBundle {
-        orthographic_projection: OrthographicProjection {
-            scale: 10.,
-            scaling_mode: ScalingMode::FixedVertical,
+    let player = spawn_player(&mut commands);
+    commands
+        .spawn_bundle(OrthographicCameraBundle {
+            orthographic_projection: OrthographicProjection {
+                scale: 10.,
+                scaling_mode: ScalingMode::FixedVertical,
+                ..default()
+            },
+            ..OrthographicCameraBundle::new_2d()
+        })
+        .insert(SmoothFollow {
+            target: Some(player),
             ..default()
-        },
-        ..OrthographicCameraBundle::new_2d()
-    });
+        });
 
     commands.insert_resource(AssetServerSettings {
         watch_for_changes: true,
@@ -49,7 +58,6 @@ pub fn setup(
     });
     info!("Starting to load world file");
     let ldtk: Handle<LdtkProject> = asset_server.load("world.ldtk");
-    spawn_player(&mut commands);
     commands.insert_resource(GameWorld { ldtk });
 
     let map_entity = commands.spawn().id();

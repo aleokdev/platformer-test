@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use bevy::{asset::AssetServerSettings, prelude::*, window::exit_on_window_close_system};
+use bevy::{
+    asset::AssetServerSettings, input::system::exit_on_esc_system, prelude::*,
+    window::exit_on_window_close_system,
+};
 use bevy_ecs_tilemap::TilemapPlugin;
 use platformer_test::{
     camera::FollowPlugin,
@@ -29,6 +32,7 @@ pub fn main() {
         })
         .add_startup_system(setup)
         .add_system(exit_on_window_close_system)
+        .add_system(exit_on_esc_system)
         .run();
 
     /*
