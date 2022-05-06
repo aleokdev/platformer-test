@@ -34,7 +34,7 @@ pub enum DigitalTrigger {
 }
 
 /// Triggers that have a state defined by a value in the `-1f32..1f32` range.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum AnalogTrigger {
     /// Emulates a real joystick axis with two [`DigitalTrigger`]s.
@@ -72,6 +72,7 @@ impl AxisState {
     }
 }
 
+#[derive(Debug)]
 struct TriggerRecord {
     just_pressed: HashSet<DigitalTrigger>,
     held: HashSet<DigitalTrigger>,
@@ -122,7 +123,9 @@ impl TriggerRecord {
     }
 
     fn press(&mut self, trigger: DigitalTrigger) {
-        self.just_pressed.insert(trigger);
+        if !self.held.contains(&trigger) {
+            self.just_pressed.insert(trigger);
+        }
     }
 
     fn release(&mut self, trigger: DigitalTrigger) {
@@ -159,7 +162,7 @@ impl Default for TriggerRecord {
 }
 
 /// A binding from an input source to an action.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ActionBinding {
     primary: DigitalTrigger,
     secondary: Option<DigitalTrigger>,
@@ -183,7 +186,7 @@ impl ActionBinding {
 }
 
 /// A binding from an input source to an axis.
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct AxisBinding {
     primary: AnalogTrigger,
     secondary: Option<AnalogTrigger>,
@@ -195,7 +198,7 @@ impl AxisBinding {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct InputBinder {
     actions: EnumMap<Action, ActionBinding>,
     axes: EnumMap<Axis, AxisBinding>,
@@ -368,6 +371,16 @@ impl Plugin for InputBindingPlugin {
             .add_system_to_stage(InputBindStage, update_mouse_input)
             .add_system_to_stage(InputBindStage, update_keyboard_input)
             .add_system_to_stage(InputBindStage, update_gamepad_input)
-            .add_system_to_stage(CoreStage::Last, update_trigger_record);
+            .add_system_to_stage(CoreStage::Last, update_trigger_record)
+            .add_system(debug_input_bindings);
     }
+}
+
+pub fn debug_input_bindings(mut egui: ResMut<bevy_egui::EguiContext>, bindings: Res<InputBinder>) {
+    let ctx = egui.ctx_mut();
+
+    use bevy_egui::egui;
+    egui::Window::new("Input bindings [debug]").show(ctx, |ui| {
+        ui.label(format!("{:?}", bindings.as_ref()));
+    });
 }

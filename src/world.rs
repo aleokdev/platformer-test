@@ -7,6 +7,7 @@ use crate::AppState;
 use bevy::asset::{AssetPath, LoadedAsset};
 use bevy::ecs::world;
 use bevy::reflect::TypeUuid;
+use bevy::render::render_resource::TextureUsages;
 use bevy::sprite::Rect;
 use bevy::{asset::AssetLoader, prelude::*};
 use bevy_ecs_tilemap::{
@@ -130,14 +131,13 @@ impl Plugin for WorldPlugin {
         app.add_plugin(TilemapPlugin)
             .add_asset::<LdtkProject>()
             .add_asset_loader(LdtkLoader)
-            .add_system_set(
-                SystemSet::on_update(AppState::Playing).with_system(process_loaded_tile_maps),
-            );
+            .add_system(process_loaded_tile_maps)
+            .add_system(set_texture_usages);
     }
 }
 
 #[derive(Component, Deref, DerefMut, Default)]
-pub struct LevelId(String);
+pub struct LevelId(pub String);
 
 #[derive(Bundle, Default)]
 pub struct LevelBundle {
@@ -147,6 +147,25 @@ pub struct LevelBundle {
     pub level_id: LevelId,
     pub collision: LevelCollision,
     pub body: StaticBody,
+}
+
+pub fn set_texture_usages(
+    mut texture_events: EventReader<AssetEvent<Image>>,
+    mut textures: ResMut<Assets<Image>>,
+) {
+    // quick and dirty, run this for all textures anytime a texture is created.
+    for event in texture_events.iter() {
+        match event {
+            AssetEvent::Created { handle } => {
+                if let Some(mut texture) = textures.get_mut(handle) {
+                    texture.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
+                        | TextureUsages::COPY_SRC
+                        | TextureUsages::COPY_DST;
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 pub fn process_loaded_tile_maps(
@@ -161,11 +180,14 @@ pub fn process_loaded_tile_maps(
 ) {
     let changed_project = map_events
         .iter()
-        .any(|event| matches!(event, AssetEvent::Modified { handle } if handle == &world.ldtk));
+        .inspect(|x| info!("{:?}", x))
+        .any(|event| matches!(event, AssetEvent::Modified { handle } | AssetEvent::Created { handle } if handle == &world.ldtk));
 
     if !changed_project {
         return;
     }
+
+    info!("Project was changed, updating map");
 
     for (_, level_id, mut map) in query.iter_mut() {
         if let Some(ldtk_map) = maps.get(&world.ldtk) {
@@ -199,22 +221,29 @@ pub fn process_loaded_tile_maps(
 
             // Pull out tilesets.
             let mut tilesets = HashMap::new();
-            ldtk_map.project.defs.tilesets.iter().for_each(|tileset| {
-                tilesets.insert(
-                    tileset.uid,
-                    (
-                        ldtk_map.tilesets.get(&tileset.uid).unwrap().clone(),
-                        tileset.clone(),
-                    ),
-                );
-            });
+            ldtk_map
+                .project
+                .defs
+                .tilesets
+                .iter()
+                // Filter out internal icons
+                .filter(|tileset| tileset.rel_path.is_some())
+                .for_each(|tileset| {
+                    tilesets.insert(
+                        tileset.uid,
+                        (
+                            ldtk_map.tilesets.get(&tileset.uid).unwrap().clone(),
+                            tileset.clone(),
+                        ),
+                    );
+                });
 
             let default_grid_size = ldtk_map.project.default_grid_size;
-            let level = &ldtk_map
+            let level = ldtk_map
                 .project
                 .levels
                 .iter()
-                .find(|l| l.identifier == **level_id)
+                .find(|&l| l.identifier == **level_id)
                 .unwrap();
 
             let map_tile_count_x = (level.px_wid / default_grid_size) as u32;
@@ -255,7 +284,7 @@ pub fn process_loaded_tile_maps(
 
                 let tileset_width_in_tiles = (tileset.px_wid / default_grid_size) as u32;
 
-                for tile in layer.grid_tiles.iter() {
+                for tile in layer.auto_layer_tiles.iter() {
                     let tileset_x = (tile.src[0] / default_grid_size) as u32;
                     let tileset_y = (tile.src[1] / default_grid_size) as u32;
 
@@ -283,9 +312,11 @@ pub fn process_loaded_tile_maps(
                 let layer = layer_bundle.layer;
                 let mut transform = Transform::from_xyz(
                     0.0,
-                    -level.px_hei as f32,
+                    -level.px_hei as f32 / 16.,
                     layer_bundle.transform.translation.z,
-                );
+                )
+                .with_scale(vec3(1. / 16., 1. / 16., 1.));
+
                 transform.translation.z = layer_id as f32;
                 map.add_layer(&mut commands, layer_id as u16, layer_entity);
                 commands.entity(layer_entity).insert_bundle(LayerBundle {

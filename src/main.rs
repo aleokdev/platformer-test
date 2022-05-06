@@ -1,11 +1,12 @@
 use std::path::Path;
 
-use bevy::{asset::AssetServerSettings, prelude::*};
+use bevy::{asset::AssetServerSettings, prelude::*, window::exit_on_window_close_system};
 use bevy_ecs_tilemap::TilemapPlugin;
 use platformer_test::{
+    camera::FollowPlugin,
     input_binding::{InputBinder, InputBindingPlugin},
     physics::PhysicsPlugin,
-    player::PlayerBundle,
+    player::{PlayerBundle, PlayerPlugin},
     setup,
     world::WorldPlugin,
     AppState,
@@ -18,8 +19,16 @@ pub fn main() {
         .add_plugin(bevy_egui::EguiPlugin)
         .add_plugin(InputBindingPlugin)
         .add_plugin(WorldPlugin)
+        .add_plugin(PlayerPlugin)
         .add_plugin(PhysicsPlugin)
+        .add_plugin(FollowPlugin)
+        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(WindowDescriptor {
+            title: "Platform Template".to_owned(),
+            ..default()
+        })
         .add_startup_system(setup)
+        .add_system(exit_on_window_close_system)
         .run();
 
     /*

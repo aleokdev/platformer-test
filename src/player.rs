@@ -9,7 +9,7 @@ use crate::{
 };
 use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
 use ggez_egui::egui;
-use glam::{ivec2, vec2, vec3, IVec2, Vec2};
+use glam::{ivec2, vec2, IVec2, Vec2};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -282,6 +282,26 @@ pub fn spawn_player(commands: &mut Commands) {
             right_side_sensor: Some(right_id.unwrap()),
             ..default()
         });
+}
+
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_system(noclip_player_movement);
+    }
+}
+
+pub fn noclip_player_movement(
+    time: Res<Time>,
+    input: Res<InputBinder>,
+    mut player: Query<&mut Transform, With<Player>>,
+) {
+    let horizontal = input.axis_value(crate::input_binding::Axis::Horizontal);
+
+    if let Ok(mut transform) = player.get_single_mut() {
+        transform.translation.x += horizontal.value() * 10. * time.delta_seconds();
+    }
 }
 
 #[derive(Deref)]

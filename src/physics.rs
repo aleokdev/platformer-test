@@ -109,7 +109,7 @@ impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.add_system_set_to_stage(
             CoreStage::PreUpdate,
-            SystemSet::on_update(AppState::Playing)
+            SystemSet::new()
                 .with_system(move_bodies)
                 .with_system(detect_bodies),
         );
@@ -129,7 +129,11 @@ pub fn detect_bodies(
     // Bodies
     bodies: Query<(Entity, &Transform, &RectCollision, &SensorBody)>,
 ) {
-    let project = map_assets.get(&world.ldtk).unwrap();
+    let project = if let Some(project) = map_assets.get(&world.ldtk) {
+        project
+    } else {
+        return;
+    };
 
     for (entity, transform, collision, _body) in bodies.iter() {
         let col_rect = collision.rect.translate(transform.translation.truncate());
