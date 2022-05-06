@@ -1,30 +1,25 @@
 (
     actions: {
         Jump: (
-            main: (
-                type: "Key",
-                key: "Space",
-                mods: []
-            ),
-            secondary: Some((
-                type: "GamepadButton",
-                id: "South"
-            ))
+            primary: Key(Space),
+            secondary: Some(
+                GamepadButton((
+                    Gamepad(0),
+                    South
+                ))
+            )
         ),
     },
     axes: {
         Horizontal: (
-            main: (
-                type: "KeyJoystick",
-                positive: "Right",
-                negative: "Left"
+            primary: DigitalJoystick(
+                positive: Key(Right),
+                negative: Key(Left)
             ),
-            secondary: Some((
-                type: "GamepadAxis",
-                id: 0,
-                axis: "LeftStickX",
-                deadzone: 0.1
-            ))
+            secondary: Some(GamepadAxis((
+                Gamepad(0),
+                LeftStickX
+            )))
         )
     }
 )

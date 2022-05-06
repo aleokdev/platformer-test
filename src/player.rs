@@ -1,14 +1,14 @@
 use std::time::Duration;
 
 use crate::{
-    input_binding::{self, InputBinder},
+    input_mapper::{self, Input, InputMapper},
     physics::{
         KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody, Velocity,
     },
 };
 use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
 use bevy_egui::egui;
-use glam::{ivec2, vec2, IVec2, Vec2};
+use glam::vec2;
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -294,10 +294,10 @@ impl Plugin for PlayerPlugin {
 
 pub fn noclip_player_movement(
     time: Res<Time>,
-    input: Res<InputBinder>,
+    input: Res<Input>,
     mut player: Query<&mut Transform, With<Player>>,
 ) {
-    let horizontal = input.axis_value(crate::input_binding::Axis::Horizontal);
+    let horizontal = input.axes[crate::input_mapper::Axis::Horizontal];
 
     if let Ok(mut transform) = player.get_single_mut() {
         transform.translation.x += horizontal.value() * 10. * time.delta_seconds();
@@ -310,18 +310,18 @@ pub struct GameplayTime(pub Stopwatch);
 pub fn update_player(
     game_time: Res<Time>,
     gameplay_time: Res<GameplayTime>,
-    input: Res<InputBinder>,
+    input: Res<Input>,
     mut player: Query<(&mut Transform, &mut Velocity, &mut Player)>,
 ) {
     let (_transform, mut velocity, mut player) = player.single_mut();
     let unpaused_time = gameplay_time.elapsed();
     // Obtain frame & input data
-    let x_input: f32 = input.axis_value(input_binding::Axis::Horizontal).value();
-    if input.action_value(input_binding::Action::Jump) == input_binding::ActionState::JustPressed {
+    let x_input: f32 = input.axes[input_mapper::Axis::Horizontal].value();
+    if input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed {
         player.pressed_jump = true;
         player.jump_pressed_time = unpaused_time;
     }
-    let pressing_jump = input.action_value(input_binding::Action::Jump).is_pressed();
+    let pressing_jump = input.actions[input_mapper::Action::Jump].is_pressed();
     let delta = game_time.delta_seconds();
 
     // Apply gravity
@@ -443,8 +443,4 @@ pub fn update_player(
 
 pub fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
     if let Ok((_player, _collisions)) = query.get_single_mut() {}
-}
-
-fn floor(point: Vec2) -> IVec2 {
-    ivec2(point.x.floor() as i32, point.y.floor() as i32)
 }

@@ -1,7 +1,7 @@
 use bevy::{input::system::exit_on_esc_system, prelude::*, window::exit_on_window_close_system};
 
 use platformer_test::{
-    camera::FollowPlugin, input_binding::InputBindingPlugin, physics::PhysicsPlugin,
+    camera::FollowPlugin, input_mapper::InputBindingPlugin, physics::PhysicsPlugin,
     player::PlayerPlugin, setup, world::WorldPlugin, AppState,
 };
 

@@ -1,12 +1,12 @@
 pub mod camera;
-pub mod input_binding;
+pub mod input_mapper;
 pub mod physics;
 pub mod player;
 pub mod util;
 pub mod world;
 
 use bevy_ecs_tilemap::Map;
-use input_binding::InputBinder;
+use input_mapper::InputMapper;
 use player::spawn_player;
 pub use player::{Player, PlayerProperties};
 use world::GameWorld;
@@ -16,6 +16,7 @@ use bevy::{asset::AssetServerSettings, prelude::*, render::camera::ScalingMode};
 
 use crate::{
     camera::SmoothFollow,
+    input_mapper::InputMappings,
     world::{LevelBundle, LevelId},
 };
 
@@ -28,7 +29,7 @@ pub enum AppState {
 pub fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut input_bindings: ResMut<InputBinder>,
+    mut input_mapper: ResMut<InputMapper>,
 ) {
     let player = spawn_player(&mut commands);
     commands
@@ -63,6 +64,5 @@ pub fn setup(
         ..Default::default()
     });
 
-    // TODO: use asset loading for bindings
-    input_bindings.load_from_str(include_str!("../assets/input.ron"));
+    input_mapper.mappings = asset_server.load::<InputMappings, _>("input.ron");
 }

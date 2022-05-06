@@ -10,7 +10,7 @@ impl Default for SmoothFollow {
     fn default() -> Self {
         Self {
             target: None,
-            multiplier: 0.85,
+            multiplier: 0.95,
         }
     }
 }

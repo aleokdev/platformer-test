@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
 use bevy::{
+    asset::{AssetLoader, LoadedAsset},
     input::{
         gamepad::{AxisSettings, ButtonSettings, GamepadSettings},
         keyboard::KeyboardInput,
         mouse::MouseButtonInput,
     },
     prelude::*,
+    reflect::TypeUuid,
     utils::HashMap,
 };
 use enum_map::{enum_map, Enum, EnumMap};
@@ -26,7 +28,6 @@ pub enum Axis {
 
 /// Triggers that have a state defined by an [ActionState] value.
 #[derive(Clone, Hash, PartialEq, Eq, Debug, Deserialize)]
-#[serde(tag = "type")]
 pub enum DigitalTrigger {
     Key(KeyCode),
     MouseButton(MouseButton),
@@ -35,7 +36,6 @@ pub enum DigitalTrigger {
 
 /// Triggers that have a state defined by a value in the `-1f32..1f32` range.
 #[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
 pub enum AnalogTrigger {
     /// Emulates a real joystick axis with two [`DigitalTrigger`]s.
     ///
@@ -57,6 +57,12 @@ pub enum ActionState {
     Held,
 }
 
+impl Default for ActionState {
+    fn default() -> Self {
+        ActionState::Released
+    }
+}
+
 impl ActionState {
     pub fn is_pressed(self) -> bool {
         matches!(self, Self::JustPressed | Self::Held)
@@ -72,7 +78,7 @@ impl AxisState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct TriggerRecord {
     just_pressed: HashSet<DigitalTrigger>,
     held: HashSet<DigitalTrigger>,
@@ -82,16 +88,6 @@ struct TriggerRecord {
 }
 
 impl TriggerRecord {
-    fn new() -> Self {
-        Self {
-            just_pressed: HashSet::new(),
-            held: HashSet::new(),
-            just_released: HashSet::new(),
-
-            axis_values: Default::default(),
-        }
-    }
-
     fn update_gamepad_button(&mut self, b: GamepadButton, state: f32, settings: &ButtonSettings) {
         let trigger = DigitalTrigger::GamepadButton(b);
         match state {
@@ -142,7 +138,7 @@ impl TriggerRecord {
         self.just_released.clear();
     }
 
-    fn state(&self, trigger: &DigitalTrigger) -> ActionState {
+    fn digital_trigger_state(&self, trigger: &DigitalTrigger) -> ActionState {
         if self.held.contains(trigger) {
             ActionState::Held
         } else if self.just_pressed.contains(trigger) {
@@ -153,11 +149,27 @@ impl TriggerRecord {
             ActionState::Released
         }
     }
-}
 
-impl Default for TriggerRecord {
-    fn default() -> Self {
-        Self::new()
+    fn analog_trigger_state(&self, trigger: &AnalogTrigger) -> Option<AxisState> {
+        match trigger {
+            AnalogTrigger::DigitalJoystick { negative, positive } => {
+                let is_negative_pressed = self.digital_trigger_state(negative).is_pressed();
+                let is_positive_pressed = self.digital_trigger_state(positive).is_pressed();
+                match (is_negative_pressed, is_positive_pressed) {
+                    (true, false) => Some(AxisState(-1.0)),
+                    (false, true) => Some(AxisState(1.0)),
+                    _ => None,
+                }
+            }
+            AnalogTrigger::GamepadAxis(axis) => {
+                let val = self.axis_values.get(axis).copied().unwrap_or_default();
+                if val.value() == 0.0 {
+                    None
+                } else {
+                    Some(val)
+                }
+            }
+        }
     }
 }
 
@@ -187,16 +199,14 @@ impl AxisBinding {
     }
 }
 
-#[derive(Deserialize, Debug)]
-pub struct InputBinder {
+#[derive(Deserialize, TypeUuid, Debug)]
+#[uuid = "a1803d98-65db-4be4-af14-eecc3af818ee"]
+pub struct InputMappings {
     actions: EnumMap<Action, ActionBinding>,
     axes: EnumMap<Axis, AxisBinding>,
-
-    #[serde(skip_deserializing)]
-    trigger_record: TriggerRecord,
 }
 
-impl Default for InputBinder {
+impl Default for InputMappings {
     fn default() -> Self {
         Self {
             actions: enum_map! {
@@ -213,72 +223,90 @@ impl Default for InputBinder {
                     None
                 ),
             },
-
-            trigger_record: TriggerRecord::new(),
         }
     }
 }
 
-impl InputBinder {
-    pub fn load_from_str(&mut self, string: &str) -> Result<(), ron::Error> {
-        *self = ron::from_str(string)?;
-        Ok(())
+pub struct InputMappingsLoader;
+
+impl AssetLoader for InputMappingsLoader {
+    fn load<'a>(
+        &'a self,
+        bytes: &'a [u8],
+        load_context: &'a mut bevy::asset::LoadContext,
+    ) -> bevy::asset::BoxedFuture<'a, anyhow::Result<(), anyhow::Error>> {
+        Box::pin(async move {
+            let loaded_asset = LoadedAsset::new(ron::de::from_bytes::<InputMappings>(bytes)?);
+            load_context.set_default_asset(loaded_asset);
+
+            Ok(())
+        })
     }
 
-    pub fn axis_value(&self, axis: Axis) -> AxisState {
-        let bindings: &AxisBinding = &self.axes[axis];
-        self.analog_trigger_value(&bindings.primary)
+    fn extensions(&self) -> &[&str] {
+        &["ron"]
+    }
+}
+
+/// An intermediate resource that holds a handle to the input mappings to use as well as the trigger record.
+///
+/// Data from the mapper is uploaded to the [`Input`] resource, ready to use.
+#[derive(Debug, Default)]
+pub struct InputMapper {
+    pub mappings: Handle<InputMappings>,
+    trigger_record: TriggerRecord,
+}
+
+/// A resource holding the mapped input state for this frame.
+#[derive(Default)]
+pub struct Input {
+    pub actions: EnumMap<Action, ActionState>,
+    pub axes: EnumMap<Axis, AxisState>,
+}
+
+fn upload_input(
+    mapper: Res<InputMapper>,
+    bindings: Res<Assets<InputMappings>>,
+    mut input: ResMut<Input>,
+) {
+    let mappings = if let Some(x) = bindings.get(&mapper.mappings) {
+        x
+    } else {
+        return;
+    };
+
+    mappings.axes.iter().for_each(|(axis, bindings)| {
+        input.axes[axis] = mapper
+            .trigger_record
+            .analog_trigger_state(&bindings.primary)
             .or_else(|| {
                 bindings
                     .secondary
                     .as_ref()
-                    .and_then(|secondary| self.analog_trigger_value(secondary))
+                    .and_then(|secondary| mapper.trigger_record.analog_trigger_state(secondary))
             })
-            .unwrap_or_default()
-    }
-
-    fn analog_trigger_value(&self, trigger: &AnalogTrigger) -> Option<AxisState> {
-        match trigger {
-            AnalogTrigger::DigitalJoystick { negative, positive } => {
-                let is_negative_pressed = self.trigger_record.state(negative).is_pressed();
-                let is_positive_pressed = self.trigger_record.state(positive).is_pressed();
-                match (is_negative_pressed, is_positive_pressed) {
-                    (true, false) => Some(AxisState(-1.0)),
-                    (false, true) => Some(AxisState(1.0)),
-                    _ => None,
-                }
-            }
-            AnalogTrigger::GamepadAxis(axis) => {
-                let val = self.trigger_record.axis_values[axis];
-                if val.value() == 0.0 {
-                    None
-                } else {
-                    Some(val)
-                }
-            }
-        }
-    }
-
-    pub fn action_value(&self, action: Action) -> ActionState {
-        let bindings: &ActionBinding = &self.actions[action];
-
-        let primary = self.trigger_record.state(&bindings.primary);
+            .unwrap_or_default();
+    });
+    mappings.actions.iter().for_each(|(action, bindings)| {
+        let primary = mapper
+            .trigger_record
+            .digital_trigger_state(&bindings.primary);
 
         let secondary = bindings
             .secondary
             .as_ref()
-            .map(|secondary| self.trigger_record.state(secondary));
+            .map(|secondary| mapper.trigger_record.digital_trigger_state(secondary));
 
-        if let Some(secondary) = secondary {
+        input.actions[action] = if let Some(secondary) = secondary {
             primary.max(secondary)
         } else {
             primary
         }
-    }
+    });
 }
 
 fn update_mouse_input(
-    mut input_binder: ResMut<InputBinder>,
+    mut input_binder: ResMut<InputMapper>,
     mut events: EventReader<MouseButtonInput>,
 ) {
     for event in events.iter() {
@@ -291,7 +319,7 @@ fn update_mouse_input(
 }
 
 fn update_keyboard_input(
-    mut input_binder: ResMut<InputBinder>,
+    mut input_binder: ResMut<InputMapper>,
     mut events: EventReader<KeyboardInput>,
 ) {
     for (state, keycode) in events
@@ -307,7 +335,7 @@ fn update_keyboard_input(
 }
 
 fn update_gamepad_input(
-    mut input_binder: ResMut<InputBinder>,
+    mut input_binder: ResMut<InputMapper>,
     settings: Res<GamepadSettings>,
     mut events: EventReader<GamepadEvent>,
 ) {
@@ -335,7 +363,7 @@ fn update_gamepad_input(
     }
 }
 
-fn update_trigger_record(mut input_binder: ResMut<InputBinder>) {
+fn update_trigger_record(mut input_binder: ResMut<InputMapper>) {
     input_binder.trigger_record.finish_frame();
 }
 
@@ -351,21 +379,30 @@ pub struct InputBindingPlugin;
 
 impl Plugin for InputBindingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<InputBinder>()
+        app.init_resource::<InputMapper>()
+            .init_resource::<Input>()
+            .add_asset::<InputMappings>()
+            .add_asset_loader(InputMappingsLoader)
             .add_stage_after(
                 CoreStage::PreUpdate,
                 InputBindStage,
                 SystemStage::parallel(),
             )
-            .add_system_to_stage(InputBindStage, update_mouse_input)
-            .add_system_to_stage(InputBindStage, update_keyboard_input)
-            .add_system_to_stage(InputBindStage, update_gamepad_input)
+            .add_system_set_to_stage(
+                InputBindStage,
+                SystemSet::new()
+                    .with_system(update_mouse_input)
+                    .with_system(update_keyboard_input)
+                    .with_system(update_gamepad_input)
+                    .label("update input"),
+            )
+            .add_system_to_stage(InputBindStage, upload_input.after("update input"))
             .add_system_to_stage(CoreStage::Last, update_trigger_record)
             .add_system(debug_input_bindings);
     }
 }
 
-pub fn debug_input_bindings(mut egui: ResMut<bevy_egui::EguiContext>, bindings: Res<InputBinder>) {
+pub fn debug_input_bindings(mut egui: ResMut<bevy_egui::EguiContext>, bindings: Res<InputMapper>) {
     let ctx = egui.ctx_mut();
 
     use bevy_egui::egui;
