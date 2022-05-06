@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::physics::LevelCollision;
 use crate::physics::RectExtras;
 use crate::physics::StaticBody;
+use crate::AppState;
 
 use bevy::asset::{AssetPath, LoadedAsset};
 
@@ -119,6 +120,19 @@ impl LdtkProject {
                         }
                     })
             })
+    }
+}
+
+pub fn change_to_playing_state_on_level_load(
+    mut map_events: EventReader<AssetEvent<LdtkProject>>,
+    mut state: ResMut<State<AppState>>,
+) {
+    if map_events
+        .iter()
+        .any(|event| matches!(event, AssetEvent::Created { .. }))
+    {
+        info!("Finished loading level");
+        state.set(AppState::Playing).unwrap();
     }
 }
 
@@ -282,7 +296,7 @@ pub fn process_loaded_tile_maps(
 
                 let tileset_width_in_tiles = (tileset.px_wid / default_grid_size) as u32;
 
-                for tile in layer.auto_layer_tiles.iter() {
+                for tile in layer.auto_layer_tiles.iter().chain(layer.grid_tiles.iter()) {
                     let tileset_x = (tile.src[0] / default_grid_size) as u32;
                     let tileset_y = (tile.src[1] / default_grid_size) as u32;
 

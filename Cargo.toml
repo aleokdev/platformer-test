@@ -13,12 +13,12 @@ serde_json = "1.0"
 ron = "0.7.0"
 serde = { version = "1.0", features = ["derive"] }
 anyhow = "1.0"
-bevy = { version = "0.7.0", features = ["serialize"] }
+bevy = { version = "0.7.0", features = ["serialize", "filesystem_watcher"] }
 bevy_egui = "0.14.0"
 bevy_ecs_tilemap = "0.6.0"
 ldtk_rust = { git = "https://github.com/aleokdev/ldtk_rust" }
 bitflags = "1.3.2"
 
 
-[profile.dev.package.ggez]
+[profile.dev.package.bevy]
 opt-level = 3

@@ -5,10 +5,12 @@ use crate::{
     physics::{
         KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody, Velocity,
     },
+    world::GameWorld,
+    AppState, LdtkProject,
 };
 use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
 use bevy_egui::egui;
-use glam::vec2;
+use glam::{vec2, vec3};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -212,7 +214,10 @@ pub struct PlayerBundle {
 impl Default for PlayerBundle {
     fn default() -> Self {
         Self {
-            sprite: Default::default(),
+            sprite: SpriteBundle {
+                transform: Transform::from_xyz(0., 0., 10.),
+                ..default()
+            },
             velocity: Default::default(),
             body: Default::default(),
             player: Default::default(),
@@ -259,11 +264,58 @@ impl PlayerSideCollisionCheckerBundle {
     }
 }
 
-pub fn spawn_player(commands: &mut Commands) -> Entity {
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+    fn build(&self, app: &mut App) {
+        //app.add_system(noclip_player_movement);
+    }
+}
+
+pub fn spawn_player(
+    mut commands: Commands,
+    world: Res<GameWorld>,
+    ldtk_maps: Res<Assets<LdtkProject>>,
+) {
+    info!("Spawning player");
+
+    let map = ldtk_maps
+        .get(&world.ldtk)
+        .expect("Player was added before project was loaded in");
+
+    let start_point_def = map
+        .project
+        .defs
+        .entities
+        .iter()
+        .find(|def| def.identifier == "Start_Point")
+        .expect("Could not find Start_Point entity definition");
+
+    let start_point = map
+        .project
+        .levels
+        .iter()
+        .flat_map(|level| level.layer_instances.iter().flatten())
+        .flat_map(|layer| layer.entity_instances.iter())
+        .find(|&entity| entity.def_uid == start_point_def.uid)
+        .expect("Could not find world start point");
+
+    let transform = Transform::from_xyz(
+        start_point.px[0] as f32 / 16.,
+        -start_point.px[1] as f32 / 16.,
+        10.,
+    );
+
     let mut left_id = None;
     let mut right_id = None;
     commands
-        .spawn_bundle(PlayerBundle::default())
+        .spawn_bundle(PlayerBundle {
+            sprite: SpriteBundle {
+                transform,
+                ..default()
+            },
+            ..default()
+        })
         .with_children(|children| {
             left_id = Some(
                 children
@@ -280,16 +332,7 @@ pub fn spawn_player(commands: &mut Commands) -> Entity {
             left_side_sensor: Some(left_id.unwrap()),
             right_side_sensor: Some(right_id.unwrap()),
             ..default()
-        })
-        .id()
-}
-
-pub struct PlayerPlugin;
-
-impl Plugin for PlayerPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_system(noclip_player_movement);
-    }
+        });
 }
 
 pub fn noclip_player_movement(
