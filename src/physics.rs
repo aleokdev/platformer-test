@@ -11,7 +11,7 @@ use glam::{ivec2, vec2};
 
 use crate::{
     world::{GameWorld, LevelId, LevelTile},
-    AppState, LdtkProject,
+    LdtkProject,
 };
 
 #[derive(Component, Deref, DerefMut, Default)]
@@ -152,7 +152,7 @@ pub fn detect_bodies(
             }
         }
 
-        for (other, other_collision, level_id, other_transform) in level_colliders.iter() {
+        for (other, _other_collision, _level_id, _other_transform) in level_colliders.iter() {
             if other == entity {
                 continue;
             }
@@ -229,7 +229,7 @@ pub fn move_bodies(
                 return true;
             }
         }
-        for (other, other_collision, level_id, other_transform) in level_colliders.iter() {
+        for (other, _other_collision, _level_id, _other_transform) in level_colliders.iter() {
             if other == entity {
                 continue;
             }
@@ -262,7 +262,7 @@ pub fn move_bodies(
         false
     };
 
-    for (entity, mut transform, mut velocity, collision, body) in bodies.iter_mut() {
+    for (entity, mut transform, mut velocity, collision, _body) in bodies.iter_mut() {
         let mut to_move = (**velocity) * delta_time;
 
         if to_move.x == 0. && to_move.y == 0. {

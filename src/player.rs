@@ -5,10 +5,9 @@ use crate::{
     physics::{
         KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody, Velocity,
     },
-    World,
 };
 use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
-use ggez_egui::egui;
+use bevy_egui::egui;
 use glam::{ivec2, vec2, IVec2, Vec2};
 
 pub struct PlayerProperties {
@@ -62,7 +61,7 @@ impl Default for PlayerProperties {
 }
 
 impl PlayerProperties {
-    pub fn show_ui(&mut self, egui_ctx: &egui::CtxRef) {
+    pub fn show_ui(&mut self, egui_ctx: &egui::Context) {
         egui::CentralPanel::default().show(egui_ctx, |ui| {
             ui.add(egui::Slider::new(&mut self.max_run_speed, 0f32..=100.).text("Max run speed"));
             egui::CollapsingHeader::new("Grounded properties")
@@ -314,7 +313,7 @@ pub fn update_player(
     input: Res<InputBinder>,
     mut player: Query<(&mut Transform, &mut Velocity, &mut Player)>,
 ) {
-    let (transform, mut velocity, mut player) = player.single_mut();
+    let (_transform, mut velocity, mut player) = player.single_mut();
     let unpaused_time = gameplay_time.elapsed();
     // Obtain frame & input data
     let x_input: f32 = input.axis_value(input_binding::Axis::Horizontal).value();
@@ -443,7 +442,7 @@ pub fn update_player(
 }
 
 pub fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
-    if let Ok((mut player, collisions)) = query.get_single_mut() {}
+    if let Ok((_player, _collisions)) = query.get_single_mut() {}
 }
 
 fn floor(point: Vec2) -> IVec2 {

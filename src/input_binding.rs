@@ -107,7 +107,7 @@ impl TriggerRecord {
                     self.release(trigger);
                 }
             }
-            _ => return,
+            _ => (),
         };
     }
 
@@ -171,17 +171,6 @@ pub struct ActionBinding {
 impl ActionBinding {
     pub fn new(primary: DigitalTrigger, secondary: Option<DigitalTrigger>) -> Self {
         Self { primary, secondary }
-    }
-
-    fn state(&self, record: &TriggerRecord) -> ActionState {
-        let primary_state = record.state(&self.primary);
-        let secondary_state = self.secondary.as_ref().map(|trigger| record.state(trigger));
-        match (primary_state, secondary_state) {
-            (primary_state, None) => primary_state,
-            (primary_state, Some(secondary_state)) => {
-                ActionState::max(primary_state, secondary_state)
-            }
-        }
     }
 }
 
@@ -251,8 +240,8 @@ impl InputBinder {
     fn analog_trigger_value(&self, trigger: &AnalogTrigger) -> Option<AxisState> {
         match trigger {
             AnalogTrigger::DigitalJoystick { negative, positive } => {
-                let is_negative_pressed = self.trigger_record.state(&negative).is_pressed();
-                let is_positive_pressed = self.trigger_record.state(&positive).is_pressed();
+                let is_negative_pressed = self.trigger_record.state(negative).is_pressed();
+                let is_positive_pressed = self.trigger_record.state(positive).is_pressed();
                 match (is_negative_pressed, is_positive_pressed) {
                     (true, false) => Some(AxisState(-1.0)),
                     (false, true) => Some(AxisState(1.0)),
@@ -354,7 +343,7 @@ fn update_trigger_record(mut input_binder: ResMut<InputBinder>) {
 struct InputBindStage;
 impl StageLabel for InputBindStage {
     fn dyn_clone(&self) -> std::boxed::Box<(dyn bevy::prelude::StageLabel + 'static)> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 
@@ -381,6 +370,6 @@ pub fn debug_input_bindings(mut egui: ResMut<bevy_egui::EguiContext>, bindings: 
 
     use bevy_egui::egui;
     egui::Window::new("Input bindings [debug]").show(ctx, |ui| {
-        ui.label(format!("{:?}", bindings.as_ref()));
+        ui.label(format!("{:#?}", bindings.as_ref()));
     });
 }

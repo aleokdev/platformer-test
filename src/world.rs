@@ -1,22 +1,20 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use crate::physics::LevelCollision;
 use crate::physics::RectExtras;
 use crate::physics::StaticBody;
-use crate::AppState;
+
 use bevy::asset::{AssetPath, LoadedAsset};
-use bevy::ecs::world;
+
 use bevy::reflect::TypeUuid;
 use bevy::render::render_resource::TextureUsages;
 use bevy::sprite::Rect;
 use bevy::{asset::AssetLoader, prelude::*};
 use bevy_ecs_tilemap::{
     Chunk, ChunkPos, ChunkSize, Layer, LayerBuilder, LayerBundle, LayerSettings, Map, MapSize,
-    TextureSize, TileBundle, TileBundleTrait, TilePos, TileSize, TilemapPlugin,
+    TextureSize, TileBundle, TilePos, TileSize, TilemapPlugin,
 };
-use glam::{ivec2, vec2, vec3, IVec2, Vec2};
-use path_clean::PathClean;
-use serde::Deserialize;
+use glam::{vec2, vec3};
 
 #[derive(TypeUuid)]
 #[uuid = "ace787fd-c5d2-4651-a42b-f08fa985676c"]
