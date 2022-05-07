@@ -6,14 +6,13 @@ pub mod time;
 pub mod util;
 pub mod world;
 
-use bevy_ecs_tilemap::Map;
 use input_mapper::InputMapper;
-use player::spawn_player;
+
 pub use player::{Player, PlayerProperties};
 use world::GameWorld;
 pub use world::LdtkProject;
 
-use bevy::{asset::AssetServerSettings, prelude::*, render::camera::ScalingMode};
+use bevy::{prelude::*, render::camera::ScalingMode};
 
 use crate::{camera::SmoothFollow, input_mapper::InputMappings};
 

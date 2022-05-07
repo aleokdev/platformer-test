@@ -7,6 +7,7 @@ use crate::AppState;
 
 use bevy::asset::{AssetPath, LoadedAsset};
 
+use bevy::math::{vec2, vec3};
 use bevy::reflect::TypeUuid;
 use bevy::render::render_resource::TextureUsages;
 use bevy::sprite::Rect;
@@ -15,7 +16,6 @@ use bevy_ecs_tilemap::{
     Chunk, ChunkPos, ChunkSize, Layer, LayerBuilder, LayerBundle, LayerSettings, Map, MapSize,
     TextureSize, TileBundle, TilePos, TileSize, TilemapPlugin,
 };
-use glam::{vec2, vec3};
 
 #[derive(TypeUuid)]
 #[uuid = "ace787fd-c5d2-4651-a42b-f08fa985676c"]

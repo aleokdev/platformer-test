@@ -4,13 +4,11 @@
 //! control over collision shapes (For tilemaps), collision sides (For player states) and didn't
 //! require many of the features it offered, such as dynamic rigidbodies or rotation.
 
+use bevy::math::{ivec2, vec2};
 use bevy::sprite::Rect;
 use bevy::{core::FixedTimestep, prelude::*};
-use bevy_ecs_tilemap::{Tile, TilePos};
 use bitflags::bitflags;
-use glam::{ivec2, vec2};
 
-use crate::Player;
 use crate::{
     world::{GameWorld, LevelId, LevelTile},
     LdtkProject,
@@ -69,7 +67,6 @@ impl RectExtras for Rect {
     }
 }
 
-// TODO: LevelCollision
 #[derive(Component, Default)]
 pub struct LevelCollision;
 
@@ -121,27 +118,6 @@ impl Plugin for PhysicsPlugin {
             );
     }
 }
-/*
-/// Resource indicating the gravity (velocity per frame) to apply to kinematic bodies
-#[derive(Deref)]
-pub struct Gravity(Vec2);
-
-impl Default for Gravity {
-    fn default() -> Self {
-        Self(vec2(0., -100.))
-    }
-}
-
-pub fn gravity(
-    time: Res<Time>,
-    gravity: Res<Gravity>,
-    mut query: Query<&mut Velocity, With<KinematicBody>>,
-) {
-    for mut velocity in query.iter_mut() {
-        **velocity += **gravity * time.delta_seconds();
-    }
-}
-*/
 
 enum CollisionType {
     Rect(Rect),
@@ -151,38 +127,6 @@ enum CollisionType {
 #[derive(Default)]
 struct PhysicsWorld {
     collisions: Vec<(Entity, CollisionType)>,
-}
-
-fn debug_level_collision(
-    player: Query<(&GlobalTransform, &RectCollision), With<Player>>,
-    mut tiles: Query<(&mut Tile, &TilePos)>,
-) {
-    if let Ok((transform, collision)) = player.get_single() {
-        let rect = collision.rect.translate(transform.translation.truncate());
-        // FIXME: This assumes tile size ~= collider size and only checks corners
-        let x = rect.min.x;
-        let y = rect.min.y;
-        let w = rect.width();
-        let h = rect.height();
-        let tiles_to_check = [
-            round(vec2(x, -y)),
-            round(vec2(x + w, -y)),
-            round(vec2(x, -y - h)),
-            round(vec2(x + w, -y - h)),
-        ];
-
-        fn round(point: Vec2) -> IVec2 {
-            ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
-        }
-
-        for (mut tile, tile_pos) in tiles.iter_mut() {
-            if tiles_to_check.contains(&ivec2(tile_pos.0 as i32, tile_pos.1 as i32)) {
-                tile.visible = false;
-            } else {
-                tile.visible = true;
-            }
-        }
-    }
 }
 
 impl PhysicsWorld {

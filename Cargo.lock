@@ -2589,7 +2589,6 @@ dependencies = [
  "bevy_egui",
  "bitflags",
  "enum-map",
- "glam",
  "ldtk_rust",
  "ron",
  "serde",

@@ -1,22 +1,18 @@
 use std::time::Duration;
 
 use crate::{
-    input_mapper::{self, Input, InputMapper},
+    input_mapper::{self, Input},
     physics::{
         CollisionSide, KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody,
         Velocity,
     },
     time::GameplayTime,
     world::GameWorld,
-    AppState, LdtkProject,
+    LdtkProject,
 };
-use bevy::{
-    core::{FixedTimestep, Stopwatch},
-    prelude::*,
-    sprite::Rect,
-};
+use bevy::math::vec2;
+use bevy::{core::FixedTimestep, prelude::*, sprite::Rect};
 use bevy_egui::egui;
-use glam::{vec2, vec3};
 
 pub struct PlayerProperties {
     pub max_run_speed: f32,
@@ -333,7 +329,7 @@ pub fn spawn_player(
             },
             ..default()
         })
-        .with_children(|children| {
+        .with_children(|_children| {
             left_id = None; /*Some(
                                 children
                                     .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
