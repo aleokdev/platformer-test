@@ -25,7 +25,7 @@ a walljump.
 - [x] Display multiple tile layers
 - [x] Load multiple levels (rooms) from a ldtk project
 - [x] Navigation around multiple rooms
-- [ ] Camera movement within a single room
+- [x] Camera movement within a single room
 - [ ] Minimap / Display map within pause menu
 
 ### Controls

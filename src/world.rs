@@ -79,12 +79,11 @@ pub struct GameWorld {
 pub enum LevelTile {
     Solid,
 }
+pub const TILE_SIZE: u32 = 16;
 
 impl LdtkProject {
     /// Coordinates given are in bevy units
     pub fn get_tile(&self, x: i64, y: i64) -> Option<LevelTile> {
-        const TILE_SIZE: u32 = 16;
-
         // LDTK coordinates are +Y Down, Bevy coordinates are +Y Up
         let y = -y;
 
@@ -210,7 +209,7 @@ pub fn spawn_maps(
             map: Map::new(level.uid as u16, map_entity),
             transform: Transform::from_xyz(
                 level.world_x as f32 / 16.0,
-                level.world_y as f32 / 16.0,
+                -level.world_y as f32 / 16.0,
                 0.0,
             ),
             level_id: LevelId(level.identifier.clone()),
@@ -297,12 +296,12 @@ pub fn process_loaded_tile_maps(
                 .find(|&l| l.identifier == **level_id)
                 .unwrap();
 
-            let map_tile_count_x = (level.px_wid / default_grid_size) as u32;
-            let map_tile_count_y = (level.px_hei / default_grid_size) as u32;
+            let level_tile_count_x = (level.px_wid / default_grid_size) as u32;
+            let level_tile_count_y = (level.px_hei / default_grid_size) as u32;
 
             let map_size = MapSize(
-                (map_tile_count_x as f32 / 32.0).ceil() as u32,
-                (map_tile_count_y as f32 / 32.0).ceil() as u32,
+                (level_tile_count_x as f32 / 32.0).ceil() as u32,
+                (level_tile_count_y as f32 / 32.0).ceil() as u32,
             );
 
             for (layer_id, layer) in level
@@ -344,7 +343,7 @@ pub fn process_loaded_tile_maps(
                         (tile.px[1] / default_grid_size) as u32,
                     );
 
-                    pos.1 = map_tile_count_y - pos.1 - 1;
+                    pos.1 = level_tile_count_y - pos.1 - 1;
 
                     layer_builder
                         .set_tile(
@@ -361,9 +360,12 @@ pub fn process_loaded_tile_maps(
 
                 let layer_bundle = layer_builder.build(&mut commands, &mut meshes, texture);
                 let layer = layer_bundle.layer;
-                let transform =
-                    Transform::from_xyz(0., -level.px_hei as f32 / 16., layer_id as f32)
-                        .with_scale(vec3(1. / 16., 1. / 16., 1.));
+                let transform = Transform::from_xyz(
+                    0.,
+                    -level.px_hei as f32 / TILE_SIZE as f32,
+                    layer_id as f32,
+                )
+                .with_scale(vec3(1. / 16., 1. / 16., 1.));
 
                 map.add_layer(&mut commands, layer_id as u16, layer_entity);
                 commands.entity(layer_entity).insert_bundle(LayerBundle {

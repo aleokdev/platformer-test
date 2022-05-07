@@ -1,4 +1,5 @@
-pub mod camera;
+pub mod debug;
+pub mod follow;
 pub mod input_mapper;
 pub mod physics;
 pub mod player;
@@ -6,6 +7,7 @@ pub mod time;
 pub mod util;
 pub mod world;
 
+use debug::DebugMode;
 use input_mapper::InputMapper;
 
 pub use player::{Player, PlayerProperties};
@@ -14,7 +16,7 @@ pub use world::LdtkProject;
 
 use bevy::{prelude::*, render::camera::ScalingMode};
 
-use crate::{camera::SmoothFollow, input_mapper::InputMappings};
+use crate::{follow::CameraFollow, input_mapper::InputMappings};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum AppState {
@@ -25,12 +27,12 @@ pub enum AppState {
 
 pub fn camera_follow_player(
     mut commands: Commands,
-    camera_query: Query<(Entity, &Camera), Without<SmoothFollow>>,
+    camera_query: Query<(Entity, &Camera), Without<CameraFollow>>,
     player_query: Query<Entity, With<Player>>,
 ) {
     if let Ok(player) = player_query.get_single() {
         for (entity, _) in camera_query.iter() {
-            commands.entity(entity).insert(SmoothFollow {
+            commands.entity(entity).insert(CameraFollow {
                 target: Some(player),
                 ..default()
             });
@@ -38,7 +40,11 @@ pub fn camera_follow_player(
     }
 }
 
-pub fn show_fps(mut egui: ResMut<bevy_egui::EguiContext>, time: Res<Time>) {
+pub fn show_fps(debug: Res<DebugMode>, mut egui: ResMut<bevy_egui::EguiContext>, time: Res<Time>) {
+    if !debug.active {
+        return;
+    }
+
     use bevy_egui::egui;
     egui::Window::new("Frame info [debug]").show(egui.ctx_mut(), |ui| {
         let delta = time.delta_seconds();
@@ -54,8 +60,11 @@ pub fn setup(
 ) {
     commands.spawn_bundle(OrthographicCameraBundle {
         orthographic_projection: OrthographicProjection {
-            scale: 10.,
-            scaling_mode: ScalingMode::FixedVertical,
+            top: 10.,
+            bottom: -10.,
+            left: -10.,
+            right: 10.,
+            scaling_mode: ScalingMode::None,
             ..default()
         },
         ..OrthographicCameraBundle::new_2d()

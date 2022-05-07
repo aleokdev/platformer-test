@@ -1,16 +1,18 @@
 use std::time::Duration;
 
 use crate::{
+    debug::DebugMode,
+    follow::CameraFollow,
     input_mapper::{self, Input},
     physics::{
         CollisionSide, KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody,
         Velocity,
     },
     time::GameplayTime,
-    world::GameWorld,
+    world::{GameWorld, TILE_SIZE},
     LdtkProject,
 };
-use bevy::math::vec2;
+use bevy::math::{ivec2, vec2};
 use bevy::{core::FixedTimestep, prelude::*, sprite::Rect};
 use bevy_egui::egui;
 
@@ -23,7 +25,10 @@ impl Plugin for PlayerPlugin {
                 .with_system(set_player_state)
                 .with_system(update_player.after(set_player_state)),
         )
-        .add_system(debug_player_state);
+        .add_system(update_current_room)
+        .add_system(update_room_pos)
+        .add_system(debug_player_state)
+        .add_system(update_camera_bounds);
     }
 }
 
@@ -202,6 +207,17 @@ impl Default for State {
     }
 }
 
+#[derive(Component, Default, PartialEq, Eq, Clone, Debug)]
+pub struct RoomPos {
+    pub x: i64,
+    pub y: i64,
+}
+
+#[derive(Component)]
+pub struct CurrentRoom {
+    id: String,
+}
+
 #[derive(Component, Default, Debug)]
 pub struct Player {
     state: State,
@@ -224,6 +240,7 @@ pub struct PlayerBundle {
     velocity: Velocity,
     body: KinematicBody,
     player: Player,
+    room_pos: RoomPos,
     collision: RectCollision,
 }
 
@@ -240,6 +257,7 @@ impl Default for PlayerBundle {
             collision: RectCollision {
                 rect: Rect::from_min_size(vec2(0., 0.), vec2(1., 1.)),
             },
+            room_pos: default(),
         }
     }
 }
@@ -346,6 +364,107 @@ pub fn spawn_player(
             right_side_sensor: right_id,
             ..default()
         });
+}
+
+fn update_camera_bounds(
+    world: Res<GameWorld>,
+    maps: Res<Assets<LdtkProject>>,
+    current_room: Query<&CurrentRoom, With<Player>>,
+    mut camera: Query<&mut CameraFollow, With<Camera>>,
+) {
+    let map = if let Some(map) = maps.get(&world.ldtk) {
+        map
+    } else {
+        return;
+    };
+
+    if let Ok(current_room) = current_room.get_single() {
+        let level = map
+            .project
+            .levels
+            .iter()
+            .find(|level| level.identifier == current_room.id)
+            .unwrap();
+
+        if let Ok(mut follow) = camera.get_single_mut() {
+            follow.bounds = Rect::from_min_size(
+                vec2(
+                    level.world_x as f32 / TILE_SIZE as f32,
+                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE as f32,
+                ),
+                vec2(
+                    level.px_wid as f32 / TILE_SIZE as f32,
+                    level.px_hei as f32 / TILE_SIZE as f32,
+                ),
+            );
+        }
+    }
+}
+
+fn update_current_room(
+    mut commands: Commands,
+    world: Res<GameWorld>,
+    maps: Res<Assets<LdtkProject>>,
+    mut query: Query<(Entity, &GlobalTransform), Changed<RoomPos>>,
+) {
+    let map = if let Some(map) = maps.get(&world.ldtk) {
+        map
+    } else {
+        return;
+    };
+
+    for (entity, transform) in query.iter_mut() {
+        for level in map.project.levels.iter() {
+            let level_rect = Rect::from_min_size(
+                vec2(
+                    level.world_x as f32 / TILE_SIZE as f32,
+                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE as f32,
+                ),
+                vec2(
+                    level.px_wid as f32 / TILE_SIZE as f32,
+                    level.px_hei as f32 / TILE_SIZE as f32,
+                ),
+            );
+            if level_rect.contains(transform.translation.truncate()) {
+                info!("{}", &level.identifier);
+                commands.entity(entity).insert(CurrentRoom {
+                    id: level.identifier.clone(),
+                });
+                break;
+            }
+        }
+    }
+}
+
+fn update_room_pos(
+    world: Res<GameWorld>,
+    maps: Res<Assets<LdtkProject>>,
+    mut query: Query<(&mut RoomPos, &GlobalTransform), Changed<GlobalTransform>>,
+) {
+    let map = if let Some(map) = maps.get(&world.ldtk) {
+        map
+    } else {
+        return;
+    };
+
+    for (mut room_pos, transform) in query.iter_mut() {
+        let get_pos = |point: Vec2| -> RoomPos {
+            RoomPos {
+                x: ((point.x - 0.5).floor() * TILE_SIZE as f32
+                    / map.project.world_grid_width.unwrap() as f32)
+                    .floor() as i64,
+                y: (point.y.round() * TILE_SIZE as f32
+                    / map.project.world_grid_height.unwrap() as f32)
+                    .floor() as i64,
+            }
+        };
+
+        let according_pos = get_pos(transform.translation.truncate());
+        if according_pos != *room_pos {
+            info!("{:?}", according_pos);
+            *room_pos = according_pos;
+        }
+    }
 }
 
 fn noclip_player_movement(
@@ -513,9 +632,14 @@ fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
 }
 
 fn debug_player_state(
+    debug: Res<DebugMode>,
     mut egui: ResMut<bevy_egui::EguiContext>,
     query: Query<(&Player, &Velocity)>,
 ) {
+    if !debug.active {
+        return;
+    }
+
     if let Ok((player, velocity)) = query.get_single() {
         egui::Window::new("Player state [debug]").show(egui.ctx_mut(), |ui| {
             ui.label(format!("Component: {:#?}", player));

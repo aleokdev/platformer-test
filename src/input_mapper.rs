@@ -14,6 +14,8 @@ use bevy::{
 use enum_map::{enum_map, Enum, EnumMap};
 use serde::Deserialize;
 
+use crate::debug::DebugMode;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
 #[non_exhaustive]
 pub enum Action {
@@ -403,10 +405,15 @@ impl Plugin for InputBindingPlugin {
 }
 
 pub fn debug_input_bindings(
+    debug: Res<DebugMode>,
     mut egui: ResMut<bevy_egui::EguiContext>,
     bindings: Res<InputMapper>,
     input: Res<Input>,
 ) {
+    if !debug.active {
+        return;
+    }
+
     let ctx = egui.ctx_mut();
 
     use bevy_egui::egui;
