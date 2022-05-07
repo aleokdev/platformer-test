@@ -4,11 +4,13 @@
 //! control over collision shapes (For tilemaps), collision sides (For player states) and didn't
 //! require many of the features it offered, such as dynamic rigidbodies or rotation.
 
-use bevy::prelude::*;
 use bevy::sprite::Rect;
+use bevy::{core::FixedTimestep, prelude::*};
+use bevy_ecs_tilemap::{Tile, TilePos};
 use bitflags::bitflags;
 use glam::{ivec2, vec2};
 
+use crate::Player;
 use crate::{
     world::{GameWorld, LevelId, LevelTile},
     LdtkProject,
@@ -93,7 +95,7 @@ bitflags! {
 
 #[derive(Component, Default)]
 pub struct KinematicCollisions {
-    side: CollisionSide,
+    pub sides: CollisionSide,
 }
 
 /// Lists the bodies being touched by this entity. Added to entities with a valid [`SensorBody`]
@@ -107,12 +109,150 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set_to_stage(
-            CoreStage::PreUpdate,
-            SystemSet::new()
-                .with_system(move_bodies)
-                .with_system(detect_bodies),
-        );
+        app /*.init_resource::<Gravity>()*/
+            .init_resource::<PhysicsWorld>()
+            .add_system_set_to_stage(
+                CoreStage::PreUpdate,
+                SystemSet::new()
+                    .with_run_criteria(FixedTimestep::step(1. / 60.))
+                    .with_system(update_physics_world)
+                    .with_system(move_bodies.after(update_physics_world))
+                    .with_system(detect_bodies.after(update_physics_world)), //.with_system(gravity),
+            );
+    }
+}
+/*
+/// Resource indicating the gravity (velocity per frame) to apply to kinematic bodies
+#[derive(Deref)]
+pub struct Gravity(Vec2);
+
+impl Default for Gravity {
+    fn default() -> Self {
+        Self(vec2(0., -100.))
+    }
+}
+
+pub fn gravity(
+    time: Res<Time>,
+    gravity: Res<Gravity>,
+    mut query: Query<&mut Velocity, With<KinematicBody>>,
+) {
+    for mut velocity in query.iter_mut() {
+        **velocity += **gravity * time.delta_seconds();
+    }
+}
+*/
+
+enum CollisionType {
+    Rect(Rect),
+    Level(LevelId),
+}
+
+#[derive(Default)]
+struct PhysicsWorld {
+    collisions: Vec<(Entity, CollisionType)>,
+}
+
+fn debug_level_collision(
+    player: Query<(&GlobalTransform, &RectCollision), With<Player>>,
+    mut tiles: Query<(&mut Tile, &TilePos)>,
+) {
+    if let Ok((transform, collision)) = player.get_single() {
+        let rect = collision.rect.translate(transform.translation.truncate());
+        // FIXME: This assumes tile size ~= collider size and only checks corners
+        let x = rect.min.x;
+        let y = rect.min.y;
+        let w = rect.width();
+        let h = rect.height();
+        let tiles_to_check = [
+            round(vec2(x, -y)),
+            round(vec2(x + w, -y)),
+            round(vec2(x, -y - h)),
+            round(vec2(x + w, -y - h)),
+        ];
+
+        fn round(point: Vec2) -> IVec2 {
+            ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
+        }
+
+        for (mut tile, tile_pos) in tiles.iter_mut() {
+            if tiles_to_check.contains(&ivec2(tile_pos.0 as i32, tile_pos.1 as i32)) {
+                tile.visible = false;
+            } else {
+                tile.visible = true;
+            }
+        }
+    }
+}
+
+impl PhysicsWorld {
+    pub fn get_rect_collisions(
+        &self,
+        rect: Rect,
+        this_entity: Entity,
+        project: &LdtkProject,
+    ) -> Option<Entity> {
+        for (other, other_collision) in self.collisions.iter() {
+            if *other == this_entity {
+                continue;
+            }
+            match other_collision {
+                CollisionType::Rect(other_rect) if other_rect.intersects(rect) => {
+                    return Some(*other);
+                }
+                CollisionType::Level(_level_id) => {
+                    // FIXME: This assumes tile size ~= collider size and only checks corners
+                    let x = rect.min.x;
+                    let y = rect.min.y;
+                    let w = rect.width();
+                    let h = rect.height();
+                    let tiles_to_check = [
+                        round(vec2(x, y)),
+                        round(vec2(x + w, y)),
+                        round(vec2(x, y + h)),
+                        round(vec2(x + w, y + h)),
+                    ];
+
+                    fn round(point: Vec2) -> IVec2 {
+                        ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
+                    }
+
+                    if tiles_to_check.into_iter().any(|pos| {
+                        matches!(
+                            project.get_tile(pos.x as i64, pos.y as i64),
+                            Some(LevelTile::Solid)
+                        )
+                    }) {
+                        // FIXME: This return value is incorrect as the whole ldtk map is checked for collisions instead of this single level
+                        return Some(*other);
+                    }
+                }
+
+                _ => (),
+            }
+        }
+
+        None
+    }
+}
+
+fn update_physics_world(
+    mut world: ResMut<PhysicsWorld>,
+    rect_colliders: Query<(Entity, &RectCollision, &GlobalTransform), With<StaticBody>>,
+
+    level_colliders: Query<(Entity, &LevelCollision, &LevelId), With<StaticBody>>,
+) {
+    world.collisions.clear();
+    for (entity, collision, transform) in rect_colliders.iter() {
+        let col_rect = collision.rect.translate(transform.translation.truncate());
+        world
+            .collisions
+            .push((entity, CollisionType::Rect(col_rect)));
+    }
+    for (entity, _collision, level_id) in level_colliders.iter() {
+        world
+            .collisions
+            .push((entity, CollisionType::Level(level_id.clone())));
     }
 }
 
@@ -127,7 +267,7 @@ pub fn detect_bodies(
     // Level colliders
     level_colliders: Query<(Entity, &LevelCollision, &LevelId, &GlobalTransform), With<StaticBody>>,
     // Bodies
-    bodies: Query<(Entity, &Transform, &RectCollision, &SensorBody)>,
+    bodies: Query<(Entity, &GlobalTransform, &RectCollision, &SensorBody)>,
 ) {
     let project = if let Some(project) = map_assets.get(&world.ldtk) {
         project
@@ -162,14 +302,14 @@ pub fn detect_bodies(
             let w = col_rect.width();
             let h = col_rect.height();
             let tiles_to_check = [
-                floor(vec2(x, y)),
-                floor(vec2(x + w, y)),
-                floor(vec2(x, y + h)),
-                floor(vec2(x + w, y + h)),
+                round(vec2(x, y)),
+                round(vec2(x + w, y)),
+                round(vec2(x, y + h)),
+                round(vec2(x + w, y + h)),
             ];
 
-            fn floor(point: Vec2) -> IVec2 {
-                ivec2(point.x.floor() as i32, point.y.floor() as i32)
+            fn round(point: Vec2) -> IVec2 {
+                ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
             }
 
             if tiles_to_check.into_iter().any(|pos| {
@@ -189,19 +329,15 @@ pub fn detect_bodies(
 
 // IMPORTANT: This must run one stage before systems that make use of collision data (e.g. Collisions)
 // because commands are executed at the end of the stage
-pub fn move_bodies(
+fn move_bodies(
     mut commands: Commands,
     time: Res<Time>,
     world: Res<GameWorld>,
+    physics_world: Res<PhysicsWorld>,
     map_assets: Res<Assets<LdtkProject>>,
-    // Rect colliders
-    rect_colliders: Query<(Entity, &RectCollision, &GlobalTransform), With<StaticBody>>,
-    // Level colliders
-    level_colliders: Query<(Entity, &LevelCollision, &LevelId, &GlobalTransform), With<StaticBody>>,
-    // Bodies
     mut bodies: Query<(
         Entity,
-        &mut Transform,
+        &mut GlobalTransform,
         &mut Velocity,
         &RectCollision,
         &KinematicBody,
@@ -214,52 +350,14 @@ pub fn move_bodies(
         return;
     };
 
-    let is_colliding = |entity: Entity, transform: &Transform, collision: &RectCollision| {
-        let col_rect = collision.rect.translate(transform.translation.truncate());
-
-        for (other, other_collision, other_transform) in rect_colliders.iter() {
-            if other == entity {
-                continue;
-            }
-            if other_collision
-                .rect
-                .translate(other_transform.translation.truncate())
-                .intersects(col_rect)
-            {
-                return true;
-            }
-        }
-        for (other, _other_collision, _level_id, _other_transform) in level_colliders.iter() {
-            if other == entity {
-                continue;
-            }
-            // FIXME: This assumes tile size ~= collider size and only checks corners
-            let x = col_rect.min.x;
-            let y = col_rect.min.y;
-            let w = col_rect.width();
-            let h = col_rect.height();
-            let tiles_to_check = [
-                floor(vec2(x, y)),
-                floor(vec2(x + w, y)),
-                floor(vec2(x, y + h)),
-                floor(vec2(x + w, y + h)),
-            ];
-
-            fn floor(point: Vec2) -> IVec2 {
-                ivec2(point.x.floor() as i32, point.y.floor() as i32)
-            }
-
-            if tiles_to_check.into_iter().any(|pos| {
-                matches!(
-                    project.get_tile(pos.x as i64, pos.y as i64),
-                    Some(LevelTile::Solid)
-                )
-            }) {
-                return true;
-            }
-        }
-
-        false
+    let is_colliding = |entity: Entity, transform: &GlobalTransform, collision: &RectCollision| {
+        physics_world
+            .get_rect_collisions(
+                collision.rect.translate(transform.translation.truncate()),
+                entity,
+                project,
+            )
+            .is_some()
     };
 
     for (entity, mut transform, mut velocity, collision, _body) in bodies.iter_mut() {
@@ -343,6 +441,6 @@ pub fn move_bodies(
 
         commands
             .entity(entity)
-            .insert(KinematicCollisions { side: collisions });
+            .insert(KinematicCollisions { sides: collisions });
     }
 }

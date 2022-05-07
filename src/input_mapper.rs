@@ -258,7 +258,7 @@ pub struct InputMapper {
 }
 
 /// A resource holding the mapped input state for this frame.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Input {
     pub actions: EnumMap<Action, ActionState>,
     pub axes: EnumMap<Axis, AxisState>,
@@ -402,11 +402,16 @@ impl Plugin for InputBindingPlugin {
     }
 }
 
-pub fn debug_input_bindings(mut egui: ResMut<bevy_egui::EguiContext>, bindings: Res<InputMapper>) {
+pub fn debug_input_bindings(
+    mut egui: ResMut<bevy_egui::EguiContext>,
+    bindings: Res<InputMapper>,
+    input: Res<Input>,
+) {
     let ctx = egui.ctx_mut();
 
     use bevy_egui::egui;
     egui::Window::new("Input bindings [debug]").show(ctx, |ui| {
         ui.label(format!("{:#?}", bindings.as_ref()));
+        ui.label(format!("{:#?}", input))
     });
 }

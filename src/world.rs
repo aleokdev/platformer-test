@@ -81,8 +81,12 @@ pub enum LevelTile {
 }
 
 impl LdtkProject {
+    /// Coordinates given are in bevy units
     pub fn get_tile(&self, x: i64, y: i64) -> Option<LevelTile> {
         const TILE_SIZE: u32 = 16;
+
+        // LDTK coordinates are +Y Down, Bevy coordinates are +Y Up
+        let y = -y;
 
         self.project
             .levels
@@ -94,14 +98,14 @@ impl LdtkProject {
                         level.world_y as f32 / TILE_SIZE as f32,
                     ),
                     vec2(
-                        level.px_wid as f32 / TILE_SIZE as f32,
-                        level.px_hei as f32 / TILE_SIZE as f32,
+                        level.px_wid as f32 / TILE_SIZE as f32 - 0.5,
+                        level.px_hei as f32 / TILE_SIZE as f32 - 0.5,
                     ),
                 )
                 .contains(vec2(x as f32, y as f32))
             })
             .and_then(|level| {
-                let local_pos = (
+                let (local_x, local_y) = (
                     x - level.world_x / TILE_SIZE as i64,
                     y - level.world_y / TILE_SIZE as i64,
                 );
@@ -112,7 +116,7 @@ impl LdtkProject {
                     .flatten()
                     .find(|layer| layer.identifier == "Collision")
                     .and_then(|layer| {
-                        let idx = local_pos.0 + local_pos.1 * layer.c_wid;
+                        let idx = local_x + local_y * layer.c_wid;
                         if layer.int_grid_csv[idx as usize] != 0 {
                             Some(LevelTile::Solid)
                         } else {
@@ -143,12 +147,13 @@ impl Plugin for WorldPlugin {
         app.add_plugin(TilemapPlugin)
             .add_asset::<LdtkProject>()
             .add_asset_loader(LdtkLoader)
-            .add_system(process_loaded_tile_maps)
+            .add_system_to_stage(CoreStage::PreUpdate, spawn_maps)
+            .add_system(process_loaded_tile_maps.after(spawn_maps))
             .add_system(set_texture_usages);
     }
 }
 
-#[derive(Component, Deref, DerefMut, Default)]
+#[derive(Component, Deref, DerefMut, Default, Clone)]
 pub struct LevelId(pub String);
 
 #[derive(Bundle, Default)]
@@ -177,6 +182,40 @@ pub fn set_texture_usages(
             }
             _ => (),
         }
+    }
+}
+
+/// Must be called one stage before [`process_loaded_tile_maps`] in order for the entities to be spawned and loaded correctly
+pub fn spawn_maps(
+    mut commands: Commands,
+    mut map_events: EventReader<AssetEvent<LdtkProject>>,
+    maps: Res<Assets<LdtkProject>>,
+    world: Res<GameWorld>,
+) {
+    let added_map = map_events
+        .iter()
+        .any(|event| matches!(event, AssetEvent::Created{handle} if handle == &world.ldtk));
+
+    if !added_map {
+        return;
+    }
+
+    let map = maps.get(&world.ldtk).unwrap();
+
+    for level in map.project.levels.iter() {
+        info!("Spawning level '{}'", &level.identifier);
+        let map_entity = commands.spawn().id();
+
+        commands.entity(map_entity).insert_bundle(LevelBundle {
+            map: Map::new(level.uid as u16, map_entity),
+            transform: Transform::from_xyz(
+                level.world_x as f32 / 16.0,
+                level.world_y as f32 / 16.0,
+                0.0,
+            ),
+            level_id: LevelId(level.identifier.clone()),
+            ..Default::default()
+        });
     }
 }
 
@@ -322,14 +361,10 @@ pub fn process_loaded_tile_maps(
 
                 let layer_bundle = layer_builder.build(&mut commands, &mut meshes, texture);
                 let layer = layer_bundle.layer;
-                let mut transform = Transform::from_xyz(
-                    0.0,
-                    -level.px_hei as f32 / 16.,
-                    layer_bundle.transform.translation.z,
-                )
-                .with_scale(vec3(1. / 16., 1. / 16., 1.));
+                let transform =
+                    Transform::from_xyz(0., -level.px_hei as f32 / 16., layer_id as f32)
+                        .with_scale(vec3(1. / 16., 1. / 16., 1.));
 
-                transform.translation.z = layer_id as f32;
                 map.add_layer(&mut commands, layer_id as u16, layer_entity);
                 commands.entity(layer_entity).insert_bundle(LayerBundle {
                     layer,

@@ -1,6 +1,8 @@
 use bevy::{
-    asset::AssetServerSettings, input::system::exit_on_esc_system, prelude::*,
-    window::exit_on_window_close_system,
+    asset::AssetServerSettings,
+    input::system::exit_on_esc_system,
+    prelude::*,
+    window::{exit_on_window_close_system, PresentMode},
 };
 
 use platformer_test::{
@@ -10,6 +12,7 @@ use platformer_test::{
     physics::PhysicsPlugin,
     player::{spawn_player, PlayerPlugin},
     setup,
+    time::TimePlugin,
     world::{change_to_playing_state_on_level_load, WorldPlugin},
     AppState,
 };
@@ -28,9 +31,11 @@ pub fn main() {
         .add_plugin(PlayerPlugin)
         .add_plugin(PhysicsPlugin)
         .add_plugin(FollowPlugin)
+        .add_plugin(TimePlugin)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(WindowDescriptor {
             title: "Platform Template".to_owned(),
+            present_mode: PresentMode::Mailbox,
             ..default()
         })
         .add_startup_system(setup)

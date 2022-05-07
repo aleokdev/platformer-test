@@ -23,7 +23,7 @@ a walljump.
 ### Level
 - [x] Load a single level
 - [x] Display multiple tile layers
-- [x] Load multiple levels (rooms) from a Tiled world
+- [x] Load multiple levels (rooms) from a ldtk project
 - [x] Navigation around multiple rooms
 - [ ] Camera movement within a single room
 - [ ] Minimap / Display map within pause menu
@@ -36,16 +36,15 @@ a walljump.
 ### Mechanics
 - [x] Simple AABB collision
 - [x] Multijump
-- [x] Sliding down walls
-- [x] Walljump
-- [ ] Platforms
+- [ ] Sliding down walls
+- [ ] Walljump
+- [ ] One-Way Platforms
 - [ ] Sticking to walls
 - [ ] Gravity switching
 
 ### Graphics
-- [ ] Sprite atlas support
-- [ ] Tile animation
 - [ ] Player animation (Walking, jumping, etc)
+- [ ] Tile animation
 - [ ] Support for externally defined (non-hardcoded) animation data
 
 ### Enemies
@@ -54,6 +53,6 @@ a walljump.
 - [ ] Basic proyectile weapons
 
 ### Extra
-- [x] Simple pause menu
+- [ ] Simple pause menu
 - [ ] Scripting support
 - [ ] Cutscene utils

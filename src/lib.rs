@@ -2,6 +2,7 @@ pub mod camera;
 pub mod input_mapper;
 pub mod physics;
 pub mod player;
+pub mod time;
 pub mod util;
 pub mod world;
 
@@ -14,16 +15,13 @@ pub use world::LdtkProject;
 
 use bevy::{asset::AssetServerSettings, prelude::*, render::camera::ScalingMode};
 
-use crate::{
-    camera::SmoothFollow,
-    input_mapper::InputMappings,
-    world::{LevelBundle, LevelId},
-};
+use crate::{camera::SmoothFollow, input_mapper::InputMappings};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum AppState {
     Loading,
     Playing,
+    Paused,
 }
 
 pub fn camera_follow_player(
@@ -57,15 +55,6 @@ pub fn setup(
 
     let ldtk: Handle<LdtkProject> = asset_server.load("world.ldtk");
     commands.insert_resource(GameWorld { ldtk });
-
-    let map_entity = commands.spawn().id();
-
-    commands.entity(map_entity).insert_bundle(LevelBundle {
-        map: Map::new(0u16, map_entity),
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        level_id: LevelId("Level_0".to_owned()),
-        ..Default::default()
-    });
 
     input_mapper.mappings = asset_server.load::<InputMappings, _>("input.ron");
 }

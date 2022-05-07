@@ -25,8 +25,8 @@ impl Plugin for FollowPlugin {
 
 pub fn follow(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &SmoothFollow)>,
-    target_q: Query<&Transform, Without<SmoothFollow>>,
+    mut query: Query<(&mut GlobalTransform, &SmoothFollow)>,
+    target_q: Query<&GlobalTransform, Without<SmoothFollow>>,
 ) {
     let delta = time.delta_seconds();
 

@@ -3,12 +3,18 @@ use std::time::Duration;
 use crate::{
     input_mapper::{self, Input, InputMapper},
     physics::{
-        KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody, Velocity,
+        CollisionSide, KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody,
+        Velocity,
     },
+    time::GameplayTime,
     world::GameWorld,
     AppState, LdtkProject,
 };
-use bevy::{core::Stopwatch, prelude::*, sprite::Rect};
+use bevy::{
+    core::{FixedTimestep, Stopwatch},
+    prelude::*,
+    sprite::Rect,
+};
 use bevy_egui::egui;
 use glam::{vec2, vec3};
 
@@ -165,7 +171,7 @@ pub enum WallslideState {
     HuggingNoWall,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SlideSide {
     /// Sliding against a wall which is to the right of the player.
     Right,
@@ -173,7 +179,7 @@ pub enum SlideSide {
     Left,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum State {
     Grounded,
     Airborne,
@@ -268,7 +274,13 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        //app.add_system(noclip_player_movement);
+        app.add_system_set(
+            SystemSet::new()
+                .with_run_criteria(FixedTimestep::step(1. / 60.))
+                .with_system(update_player)
+                .with_system(set_player_state),
+        )
+        .add_system(debug_player_state);
     }
 }
 
@@ -277,8 +289,6 @@ pub fn spawn_player(
     world: Res<GameWorld>,
     ldtk_maps: Res<Assets<LdtkProject>>,
 ) {
-    info!("Spawning player");
-
     let map = ldtk_maps
         .get(&world.ldtk)
         .expect("Player was added before project was loaded in");
@@ -291,20 +301,27 @@ pub fn spawn_player(
         .find(|def| def.identifier == "Start_Point")
         .expect("Could not find Start_Point entity definition");
 
-    let start_point = map
+    let (start_level, start_point) = map
         .project
         .levels
         .iter()
-        .flat_map(|level| level.layer_instances.iter().flatten())
-        .flat_map(|layer| layer.entity_instances.iter())
-        .find(|&entity| entity.def_uid == start_point_def.uid)
+        .find_map(|level| {
+            level
+                .layer_instances
+                .iter()
+                .flatten()
+                .flat_map(|layer| layer.entity_instances.iter())
+                .find(|&entity| entity.def_uid == start_point_def.uid)
+                .map(|entity| (level, entity))
+        })
         .expect("Could not find world start point");
 
-    let transform = Transform::from_xyz(
-        start_point.px[0] as f32 / 16.,
-        -start_point.px[1] as f32 / 16.,
-        10.,
-    );
+    let px = (start_point.px[0] + start_level.world_x) as f32 / 16.;
+    let py = -(start_point.px[1] + start_level.world_y) as f32 / 16.;
+
+    let transform = Transform::from_xyz(px, py, 10.);
+
+    info!("Spawning player @ {:?}", transform.translation);
 
     let mut left_id = None;
     let mut right_id = None;
@@ -317,25 +334,25 @@ pub fn spawn_player(
             ..default()
         })
         .with_children(|children| {
-            left_id = Some(
-                children
-                    .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
-                    .id(),
-            );
-            right_id = Some(
-                children
-                    .spawn_bundle(PlayerSideCollisionCheckerBundle::right())
-                    .id(),
-            );
+            left_id = None; /*Some(
+                                children
+                                    .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
+                                    .id(),
+                            );*/
+            right_id = None; /*Some(
+                                 children
+                                     .spawn_bundle(PlayerSideCollisionCheckerBundle::right())
+                                     .id(),
+                             );*/
         })
         .insert(Player {
-            left_side_sensor: Some(left_id.unwrap()),
-            right_side_sensor: Some(right_id.unwrap()),
+            left_side_sensor: left_id,
+            right_side_sensor: right_id,
             ..default()
         });
 }
 
-pub fn noclip_player_movement(
+fn noclip_player_movement(
     time: Res<Time>,
     input: Res<Input>,
     mut player: Query<&mut Transform, With<Player>>,
@@ -347,28 +364,31 @@ pub fn noclip_player_movement(
     }
 }
 
-#[derive(Deref)]
-pub struct GameplayTime(pub Stopwatch);
-
-pub fn update_player(
-    game_time: Res<Time>,
+fn update_player(
+    time: Res<Time>,
     gameplay_time: Res<GameplayTime>,
     input: Res<Input>,
-    mut player: Query<(&mut Transform, &mut Velocity, &mut Player)>,
+    mut player: Query<(&mut Velocity, &mut Player)>,
 ) {
-    let (_transform, mut velocity, mut player) = player.single_mut();
+    let (mut velocity, mut player) = if let Ok(player) = player.get_single_mut() {
+        player
+    } else {
+        return;
+    };
+    let delta = time.delta_seconds();
     let unpaused_time = gameplay_time.elapsed();
+
     // Obtain frame & input data
     let x_input: f32 = input.axes[input_mapper::Axis::Horizontal].value();
+    // TODO: extract to own system
     if input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed {
         player.pressed_jump = true;
         player.jump_pressed_time = unpaused_time;
     }
     let pressing_jump = input.actions[input_mapper::Action::Jump].is_pressed();
-    let delta = game_time.delta_seconds();
 
     // Apply gravity
-    velocity.y += if pressing_jump && velocity.y < 0. {
+    velocity.y -= if pressing_jump && velocity.y > 0. {
         player.properties.jump_gravity
     } else {
         player.properties.gravity
@@ -380,7 +400,9 @@ pub fn update_player(
     // Clamp velocity if sliding down wall
     if matches!(player.state, State::Sliding { .. }) {
         if let Some(wallslide_max_v_speed) = player.properties.wallslide_max_v_speed {
-            velocity.y = velocity.y.clamp(-f32::INFINITY, wallslide_max_v_speed);
+            velocity.y = velocity
+                .y
+                .clamp(-wallslide_max_v_speed, wallslide_max_v_speed);
         }
     }
 
@@ -431,7 +453,7 @@ pub fn update_player(
                 player.can_jump = true;
             }
             player.times_jumped_since_grounded = 0;
-            player.last_grounded_time = game_time.time_since_startup();
+            player.last_grounded_time = time.time_since_startup();
         }
         State::Airborne
             if player.times_jumped_since_grounded == 0
@@ -454,7 +476,7 @@ pub fn update_player(
                 player.pressed_jump = false;
                 player.last_walljump_time = unpaused_time;
 
-                velocity.y = -player.properties.walljump_vertical_force;
+                velocity.y = player.properties.walljump_vertical_force;
                 velocity.x = match side {
                     SlideSide::Left => player.properties.walljump_horizontal_force,
                     SlideSide::Right => -player.properties.walljump_horizontal_force,
@@ -463,7 +485,7 @@ pub fn update_player(
             _ if player.can_jump => {
                 player.pressed_jump = false;
 
-                velocity.y = -player.properties.jump_force
+                velocity.y = player.properties.jump_force
                     * player
                         .properties
                         .multijump_coefficient
@@ -484,6 +506,24 @@ pub fn update_player(
     }
 }
 
-pub fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
-    if let Ok((_player, _collisions)) = query.get_single_mut() {}
+fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
+    if let Ok((mut player, collisions)) = query.get_single_mut() {
+        if collisions.sides.contains(CollisionSide::DOWN) {
+            player.state = State::Grounded;
+        } else {
+            player.state = State::Airborne;
+        }
+    }
+}
+
+fn debug_player_state(
+    mut egui: ResMut<bevy_egui::EguiContext>,
+    query: Query<(&Player, &Velocity)>,
+) {
+    if let Ok((player, velocity)) = query.get_single() {
+        egui::Window::new("Player state [debug]").show(egui.ctx_mut(), |ui| {
+            ui.label(format!("State: {:?}", player.state));
+            ui.label(format!("Velocity: {:?}", **velocity));
+        });
+    }
 }
