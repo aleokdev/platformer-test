@@ -14,6 +14,20 @@ use bevy::math::vec2;
 use bevy::{core::FixedTimestep, prelude::*, sprite::Rect};
 use bevy_egui::egui;
 
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_system_set(
+            SystemSet::new()
+                .with_system(set_player_state)
+                .with_system(update_player.after(set_player_state)),
+        )
+        .add_system(debug_player_state);
+    }
+}
+
+#[derive(Debug)]
 pub struct PlayerProperties {
     pub max_run_speed: f32,
     pub terminal_speed: f32,
@@ -188,7 +202,7 @@ impl Default for State {
     }
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Debug)]
 pub struct Player {
     state: State,
     properties: PlayerProperties,
@@ -263,20 +277,6 @@ impl PlayerSideCollisionCheckerBundle {
             transform: Transform::from_xyz(0.1, 0., 0.),
             ..default()
         }
-    }
-}
-
-pub struct PlayerPlugin;
-
-impl Plugin for PlayerPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_system_set(
-            SystemSet::new()
-                .with_run_criteria(FixedTimestep::step(1. / 60.))
-                .with_system(update_player)
-                .with_system(set_player_state),
-        )
-        .add_system(debug_player_state);
     }
 }
 
@@ -518,7 +518,7 @@ fn debug_player_state(
 ) {
     if let Ok((player, velocity)) = query.get_single() {
         egui::Window::new("Player state [debug]").show(egui.ctx_mut(), |ui| {
-            ui.label(format!("State: {:?}", player.state));
+            ui.label(format!("Component: {:#?}", player));
             ui.label(format!("Velocity: {:?}", **velocity));
         });
     }

@@ -30,6 +30,17 @@ bevy_egui = "0.14.0"
 # Tilemap instancing
 bevy_ecs_tilemap = "0.6.0"
 
+bevy_framepace = "0.4.0"
+
 
 [profile.dev.package.bevy]
 opt-level = 3
+
+[profile.dev.package.bevy_egui]
+opt-level = 3
+
+[profile.dev.package.bevy_ecs_tilemap]
+opt-level = 3
+
+[profile.dev]
+lto = "thin"

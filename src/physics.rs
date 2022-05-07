@@ -102,6 +102,8 @@ pub struct SensedBodies {
     others: Vec<Entity>,
 }
 
+const PHYSICS_TIME_STEP: f64 = 1. / 60.;
+
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
@@ -109,9 +111,9 @@ impl Plugin for PhysicsPlugin {
         app /*.init_resource::<Gravity>()*/
             .init_resource::<PhysicsWorld>()
             .add_system_set_to_stage(
-                CoreStage::PreUpdate,
+                CoreStage::PostUpdate,
                 SystemSet::new()
-                    .with_run_criteria(FixedTimestep::step(1. / 60.))
+                    .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                     .with_system(update_physics_world)
                     .with_system(move_bodies.after(update_physics_world))
                     .with_system(detect_bodies.after(update_physics_world)), //.with_system(gravity),
@@ -275,7 +277,6 @@ pub fn detect_bodies(
 // because commands are executed at the end of the stage
 fn move_bodies(
     mut commands: Commands,
-    time: Res<Time>,
     world: Res<GameWorld>,
     physics_world: Res<PhysicsWorld>,
     map_assets: Res<Assets<LdtkProject>>,
@@ -287,7 +288,7 @@ fn move_bodies(
         &KinematicBody,
     )>,
 ) {
-    let delta_time = time.delta_seconds();
+    let delta_time = PHYSICS_TIME_STEP as f32;
     let project = if let Some(x) = map_assets.get(&world.ldtk) {
         x
     } else {
@@ -371,7 +372,6 @@ fn move_bodies(
                         };
 
                         **velocity = Vec2::ZERO;
-                        return;
                     }
                 }
 

@@ -38,6 +38,15 @@ pub fn camera_follow_player(
     }
 }
 
+pub fn show_fps(mut egui: ResMut<bevy_egui::EguiContext>, time: Res<Time>) {
+    use bevy_egui::egui;
+    egui::Window::new("Frame info [debug]").show(egui.ctx_mut(), |ui| {
+        let delta = time.delta_seconds();
+        ui.label(format!("Frame time: {:.3}", delta));
+        ui.label(format!("FPS: {:.0}", 1. / delta));
+    });
+}
+
 pub fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,

@@ -11,7 +11,7 @@ use platformer_test::{
     input_mapper::InputBindingPlugin,
     physics::PhysicsPlugin,
     player::{spawn_player, PlayerPlugin},
-    setup,
+    setup, show_fps,
     time::TimePlugin,
     world::{change_to_playing_state_on_level_load, WorldPlugin},
     AppState,
@@ -23,8 +23,9 @@ pub fn main() {
             watch_for_changes: true,
             ..default()
         })
-        .add_state(AppState::Loading)
         .add_plugins(DefaultPlugins)
+        .add_plugin(bevy_framepace::FramepacePlugin::default())
+        .add_state(AppState::Loading)
         .add_plugin(bevy_egui::EguiPlugin)
         .add_plugin(InputBindingPlugin)
         .add_plugin(WorldPlugin)
@@ -40,6 +41,7 @@ pub fn main() {
         })
         .add_startup_system(setup)
         .add_system(camera_follow_player)
+        .add_system(show_fps)
         .add_system_set(
             SystemSet::on_update(AppState::Loading)
                 .with_system(change_to_playing_state_on_level_load),
