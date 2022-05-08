@@ -12,8 +12,8 @@ use crate::{
     world::{GameWorld, TILE_SIZE},
     LdtkProject,
 };
-use bevy::math::{ivec2, vec2};
-use bevy::{core::FixedTimestep, prelude::*, sprite::Rect};
+use bevy::math::vec2;
+use bevy::{prelude::*, sprite::Rect};
 use bevy_egui::egui;
 
 pub struct PlayerPlugin;
@@ -22,8 +22,9 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_system_set(
             SystemSet::new()
-                .with_system(set_player_state)
-                .with_system(update_player.after(set_player_state)),
+                .with_system(set_player_state.before(update_player))
+                .with_system(update_jump.before(update_player))
+                .with_system(update_player),
         )
         .add_system(update_current_room)
         .add_system(update_room_pos)
@@ -176,16 +177,6 @@ impl PlayerProperties {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum WallslideState {
-    /// Collided with a wall while moving on the -X direction, now the player is sliding down it.
-    HuggingLeftWall,
-    /// Collided with a wall while moving on the +X direction, now the player is sliding down it.
-    HuggingRightWall,
-    /// Not collided with any walls horizontally while moving.
-    HuggingNoWall,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SlideSide {
     /// Sliding against a wall which is to the right of the player.
@@ -251,9 +242,9 @@ impl Default for PlayerBundle {
                 transform: Transform::from_xyz(0., 0., 10.),
                 ..default()
             },
-            velocity: Default::default(),
-            body: Default::default(),
-            player: Default::default(),
+            velocity: default(),
+            body: default(),
+            player: default(),
             collision: RectCollision {
                 rect: Rect::from_min_size(vec2(0., 0.), vec2(1., 1.)),
             },
@@ -273,12 +264,12 @@ struct PlayerSideCollisionCheckerBundle {
 impl Default for PlayerSideCollisionCheckerBundle {
     fn default() -> Self {
         Self {
-            global_transform: Default::default(),
-            transform: Default::default(),
+            global_transform: default(),
+            transform: default(),
             collision: RectCollision {
                 rect: Rect::from_min_size(vec2(0., 0.), vec2(1., 1.)),
             },
-            body: Default::default(),
+            body: default(),
         }
     }
 }
@@ -305,7 +296,7 @@ pub fn spawn_player(
 ) {
     let map = ldtk_maps
         .get(&world.ldtk)
-        .expect("Player was added before project was loaded in");
+        .expect("Player was spawned before project was loaded in");
 
     let start_point_def = map
         .project
@@ -378,6 +369,8 @@ fn update_camera_bounds(
         return;
     };
 
+    const TILE_SIZE: f32 = crate::world::TILE_SIZE as f32;
+
     if let Ok(current_room) = current_room.get_single() {
         let level = map
             .project
@@ -389,12 +382,12 @@ fn update_camera_bounds(
         if let Ok(mut follow) = camera.get_single_mut() {
             follow.bounds = Rect::from_min_size(
                 vec2(
-                    level.world_x as f32 / TILE_SIZE as f32,
-                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE as f32,
+                    level.world_x as f32 / TILE_SIZE,
+                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE,
                 ),
                 vec2(
-                    level.px_wid as f32 / TILE_SIZE as f32,
-                    level.px_hei as f32 / TILE_SIZE as f32,
+                    level.px_wid as f32 / TILE_SIZE,
+                    level.px_hei as f32 / TILE_SIZE,
                 ),
             );
         }
@@ -413,20 +406,21 @@ fn update_current_room(
         return;
     };
 
+    const TILE_SIZE: f32 = crate::world::TILE_SIZE as f32;
+
     for (entity, transform) in query.iter_mut() {
         for level in map.project.levels.iter() {
             let level_rect = Rect::from_min_size(
                 vec2(
-                    level.world_x as f32 / TILE_SIZE as f32,
-                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE as f32,
+                    level.world_x as f32 / TILE_SIZE,
+                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE,
                 ),
                 vec2(
-                    level.px_wid as f32 / TILE_SIZE as f32,
-                    level.px_hei as f32 / TILE_SIZE as f32,
+                    level.px_wid as f32 / TILE_SIZE,
+                    level.px_hei as f32 / TILE_SIZE,
                 ),
             );
             if level_rect.contains(transform.translation.truncate()) {
-                info!("{}", &level.identifier);
                 commands.entity(entity).insert(CurrentRoom {
                     id: level.identifier.clone(),
                 });
@@ -461,21 +455,25 @@ fn update_room_pos(
 
         let according_pos = get_pos(transform.translation.truncate());
         if according_pos != *room_pos {
-            info!("{:?}", according_pos);
             *room_pos = according_pos;
         }
     }
 }
 
-fn noclip_player_movement(
-    time: Res<Time>,
+fn update_jump(
+    gameplay_time: Res<GameplayTime>,
     input: Res<Input>,
-    mut player: Query<&mut Transform, With<Player>>,
+    mut player: Query<&mut Player>,
 ) {
-    let horizontal = input.axes[crate::input_mapper::Axis::Horizontal];
+    let mut player = if let Ok(player) = player.get_single_mut() {
+        player
+    } else {
+        return;
+    };
 
-    if let Ok(mut transform) = player.get_single_mut() {
-        transform.translation.x += horizontal.value() * 10. * time.delta_seconds();
+    if input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed {
+        player.pressed_jump = true;
+        player.jump_pressed_time = gameplay_time.elapsed();
     }
 }
 
@@ -495,11 +493,6 @@ fn update_player(
 
     // Obtain frame & input data
     let x_input: f32 = input.axes[input_mapper::Axis::Horizontal].value();
-    // TODO: extract to own system
-    if input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed {
-        player.pressed_jump = true;
-        player.jump_pressed_time = unpaused_time;
-    }
     let pressing_jump = input.actions[input_mapper::Action::Jump].is_pressed();
 
     // Apply gravity
@@ -628,6 +621,20 @@ fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
         } else {
             player.state = State::Airborne;
         }
+    }
+}
+
+// Debug systems
+
+fn noclip_player_movement(
+    time: Res<Time>,
+    input: Res<Input>,
+    mut player: Query<&mut Transform, With<Player>>,
+) {
+    let horizontal = input.axes[crate::input_mapper::Axis::Horizontal];
+
+    if let Ok(mut transform) = player.get_single_mut() {
+        transform.translation.x += horizontal.value() * 10. * time.delta_seconds();
     }
 }
 

@@ -1,7 +1,6 @@
 use bevy::{
     asset::AssetServerSettings,
     input::system::exit_on_esc_system,
-    log::LogSettings,
     prelude::*,
     window::{exit_on_window_close_system, PresentMode},
 };
