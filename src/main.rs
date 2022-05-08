@@ -35,7 +35,7 @@ pub fn main() {
     .add_plugin(PhysicsPlugin)
     .add_plugin(FollowPlugin)
     .add_plugin(TimePlugin)
-    .insert_resource(ClearColor(Color::BLACK))
+    .insert_resource(ClearColor(Color::hex("34202b").unwrap()))
     .insert_resource(WindowDescriptor {
         title: "Platform Template".to_owned(),
         present_mode: PresentMode::Mailbox,
