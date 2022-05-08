@@ -398,7 +398,7 @@ fn update_current_room(
     mut commands: Commands,
     world: Res<GameWorld>,
     maps: Res<Assets<LdtkProject>>,
-    mut query: Query<(Entity, &GlobalTransform), Changed<RoomPos>>,
+    mut query: Query<(Entity, &GlobalTransform, Option<&CurrentRoom>), Changed<RoomPos>>,
 ) {
     let map = if let Some(map) = maps.get(&world.ldtk) {
         map
@@ -408,16 +408,20 @@ fn update_current_room(
 
     const TILE_SIZE: f32 = crate::world::TILE_SIZE as f32;
 
-    for (entity, transform) in query.iter_mut() {
-        for level in map.project.levels.iter() {
+    for (entity, transform, current_room) in query.iter_mut() {
+        for level in map.project.levels.iter().filter(|level| {
+            current_room
+                .map(|room| level.identifier != room.id)
+                .unwrap_or(true)
+        }) {
             let level_rect = Rect::from_min_size(
                 vec2(
-                    level.world_x as f32 / TILE_SIZE,
-                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE,
+                    level.world_x as f32 / TILE_SIZE - 0.5,
+                    -(level.world_y + level.px_hei) as f32 / TILE_SIZE - 0.5,
                 ),
                 vec2(
-                    level.px_wid as f32 / TILE_SIZE,
-                    level.px_hei as f32 / TILE_SIZE,
+                    level.px_wid as f32 / TILE_SIZE + 1.,
+                    level.px_hei as f32 / TILE_SIZE + 1.,
                 ),
             );
             if level_rect.contains(transform.translation.truncate()) {
