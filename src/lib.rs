@@ -60,10 +60,10 @@ pub fn setup(
 ) {
     commands.spawn_bundle(OrthographicCameraBundle {
         orthographic_projection: OrthographicProjection {
-            top: 10.,
-            bottom: -10.,
-            left: -10.,
-            right: 10.,
+            top: 8.,
+            bottom: -8.,
+            left: -8.,
+            right: 8.,
             scaling_mode: ScalingMode::None,
             ..default()
         },

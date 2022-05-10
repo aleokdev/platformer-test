@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::physics::LevelCollision;
 use crate::physics::RectExtras;
 use crate::physics::StaticBody;
 use crate::AppState;
@@ -76,14 +75,19 @@ pub struct GameWorld {
     pub ldtk: Handle<LdtkProject>,
 }
 
-pub enum LevelTile {
-    Solid,
+bitflags::bitflags! {
+    #[derive(Default)]
+    pub struct LevelTile: u8 {
+        const SOLID = 0b0001;
+        const PLATFORM = 0b0010;
+    }
 }
+
 pub const TILE_SIZE: u32 = 16;
 
 impl LdtkProject {
     /// Coordinates given are in bevy units
-    pub fn get_tile(&self, x: i64, y: i64) -> Option<LevelTile> {
+    pub fn get_tile(&self, x: i64, y: i64) -> LevelTile {
         // LDTK coordinates are +Y Down, Bevy coordinates are +Y Up
         let y = -y;
 
@@ -103,25 +107,43 @@ impl LdtkProject {
                 )
                 .contains(vec2(x as f32, y as f32))
             })
-            .and_then(|level| {
+            .map_or(LevelTile::empty(), |level| {
                 let (local_x, local_y) = (
                     x - level.world_x / TILE_SIZE as i64,
                     y - level.world_y / TILE_SIZE as i64,
                 );
 
-                level
+                let collision = level
                     .layer_instances
                     .iter()
                     .flatten()
                     .find(|layer| layer.identifier == "Collision")
-                    .and_then(|layer| {
+                    .map_or(LevelTile::empty(), |layer| {
                         let idx = local_x + local_y * layer.c_wid;
                         if layer.int_grid_csv[idx as usize] != 0 {
-                            Some(LevelTile::Solid)
+                            LevelTile::SOLID
                         } else {
-                            None
+                            LevelTile::empty()
                         }
-                    })
+                    });
+
+                if !collision.is_empty() {
+                    collision
+                } else {
+                    level
+                        .layer_instances
+                        .iter()
+                        .flatten()
+                        .find(|layer| layer.identifier == "Platforms")
+                        .map_or(LevelTile::empty(), |layer| {
+                            let idx = local_x + local_y * layer.c_wid;
+                            if layer.int_grid_csv[idx as usize] != 0 {
+                                LevelTile::PLATFORM
+                            } else {
+                                LevelTile::empty()
+                            }
+                        })
+                }
             })
     }
 }
@@ -161,7 +183,6 @@ pub struct LevelBundle {
     pub transform: Transform,
     pub global_transform: GlobalTransform,
     pub level_id: LevelId,
-    pub collision: LevelCollision,
     pub body: StaticBody,
 }
 

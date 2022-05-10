@@ -67,18 +67,35 @@ impl RectExtras for Rect {
     }
 }
 
-#[derive(Component, Default)]
-pub struct LevelCollision;
+#[derive(Component)]
+pub struct KinematicBody {
+    mask: LevelTile,
+}
 
-#[derive(Component, Default)]
-pub struct KinematicBody;
-
+impl Default for KinematicBody {
+    fn default() -> Self {
+        Self {
+            mask: LevelTile::SOLID,
+        }
+    }
+}
 #[derive(Component, Default)]
 pub struct StaticBody;
+
 // TODO: Merge KinematicBody & StaticBody into a RigidBody enum
 
-#[derive(Component, Default)]
-pub struct SensorBody;
+#[derive(Component)]
+pub struct SensorBody {
+    mask: LevelTile,
+}
+
+impl Default for SensorBody {
+    fn default() -> Self {
+        Self {
+            mask: LevelTile::SOLID,
+        }
+    }
+}
 
 bitflags! {
     #[derive(Default)]
@@ -100,6 +117,7 @@ pub struct KinematicCollisions {
 #[derive(Component, Default)]
 pub struct SensedBodies {
     others: Vec<Entity>,
+    world: bool,
 }
 
 const PHYSICS_TIME_STEP: f64 = 1. / 60.;
@@ -121,60 +139,19 @@ impl Plugin for PhysicsPlugin {
     }
 }
 
-enum CollisionType {
-    Rect(Rect),
-    Level(LevelId),
-}
-
 #[derive(Default)]
 struct PhysicsWorld {
-    collisions: Vec<(Entity, CollisionType)>,
+    collisions: Vec<(Entity, Rect)>,
 }
 
 impl PhysicsWorld {
-    pub fn get_rect_collisions(
-        &self,
-        rect: Rect,
-        this_entity: Entity,
-        project: &LdtkProject,
-    ) -> Option<Entity> {
+    pub fn get_rect_collisions(&self, rect: Rect, this_entity: Entity) -> Option<Entity> {
         for (other, other_collision) in self.collisions.iter() {
             if *other == this_entity {
                 continue;
             }
-            match other_collision {
-                CollisionType::Rect(other_rect) if other_rect.intersects(rect) => {
-                    return Some(*other);
-                }
-                CollisionType::Level(_level_id) => {
-                    // FIXME: This assumes tile size ~= collider size and only checks corners
-                    let x = rect.min.x;
-                    let y = rect.min.y;
-                    let w = rect.width();
-                    let h = rect.height();
-                    let tiles_to_check = [
-                        round(vec2(x, y)),
-                        round(vec2(x + w, y)),
-                        round(vec2(x, y + h)),
-                        round(vec2(x + w, y + h)),
-                    ];
-
-                    fn round(point: Vec2) -> IVec2 {
-                        ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
-                    }
-
-                    if tiles_to_check.into_iter().any(|pos| {
-                        matches!(
-                            project.get_tile(pos.x as i64, pos.y as i64),
-                            Some(LevelTile::Solid)
-                        )
-                    }) {
-                        // FIXME: This return value is incorrect as the whole ldtk map is checked for collisions instead of this single level
-                        return Some(*other);
-                    }
-                }
-
-                _ => (),
+            if other_collision.intersects(rect) {
+                return Some(*other);
             }
         }
 
@@ -182,23 +159,36 @@ impl PhysicsWorld {
     }
 }
 
+fn is_colliding_with_world(rect: Rect, project: &LdtkProject, mask: LevelTile) -> bool {
+    // FIXME: This assumes tile size ~= collider size and only checks corners
+    let x = rect.min.x;
+    let y = rect.min.y;
+    let w = rect.width();
+    let h = rect.height();
+    let tiles_to_check = [
+        round(vec2(x, y)),
+        round(vec2(x + w, y)),
+        round(vec2(x, y + h)),
+        round(vec2(x + w, y + h)),
+    ];
+
+    fn round(point: Vec2) -> IVec2 {
+        ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
+    }
+
+    tiles_to_check
+        .into_iter()
+        .any(|pos| !(mask & project.get_tile(pos.x as i64, pos.y as i64)).is_empty())
+}
+
 fn update_physics_world(
     mut world: ResMut<PhysicsWorld>,
     rect_colliders: Query<(Entity, &RectCollision, &GlobalTransform), With<StaticBody>>,
-
-    level_colliders: Query<(Entity, &LevelCollision, &LevelId), With<StaticBody>>,
 ) {
     world.collisions.clear();
     for (entity, collision, transform) in rect_colliders.iter() {
         let col_rect = collision.rect.translate(transform.translation.truncate());
-        world
-            .collisions
-            .push((entity, CollisionType::Rect(col_rect)));
-    }
-    for (entity, _collision, level_id) in level_colliders.iter() {
-        world
-            .collisions
-            .push((entity, CollisionType::Level(level_id.clone())));
+        world.collisions.push((entity, col_rect));
     }
 }
 
@@ -210,8 +200,6 @@ pub fn detect_bodies(
 
     // Rect colliders
     rect_colliders: Query<(Entity, &RectCollision, &GlobalTransform), With<StaticBody>>,
-    // Level colliders
-    level_colliders: Query<(Entity, &LevelCollision, &LevelId, &GlobalTransform), With<StaticBody>>,
     // Bodies
     bodies: Query<(Entity, &GlobalTransform, &RectCollision, &SensorBody)>,
 ) {
@@ -221,7 +209,7 @@ pub fn detect_bodies(
         return;
     };
 
-    for (entity, transform, collision, _body) in bodies.iter() {
+    for (entity, transform, collision, body) in bodies.iter() {
         let col_rect = collision.rect.translate(transform.translation.truncate());
         let mut bodies_sensed = Vec::new();
 
@@ -238,37 +226,9 @@ pub fn detect_bodies(
             }
         }
 
-        for (other, _other_collision, _level_id, _other_transform) in level_colliders.iter() {
-            if other == entity {
-                continue;
-            }
-            // FIXME: This assumes tile size ~= collider size and only checks corners
-            let x = col_rect.min.x;
-            let y = col_rect.min.y;
-            let w = col_rect.width();
-            let h = col_rect.height();
-            let tiles_to_check = [
-                round(vec2(x, y)),
-                round(vec2(x + w, y)),
-                round(vec2(x, y + h)),
-                round(vec2(x + w, y + h)),
-            ];
-
-            fn round(point: Vec2) -> IVec2 {
-                ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
-            }
-
-            if tiles_to_check.into_iter().any(|pos| {
-                matches!(
-                    project.get_tile(pos.x as i64, pos.y as i64),
-                    Some(LevelTile::Solid)
-                )
-            }) {
-                bodies_sensed.push(other);
-            }
-        }
         commands.entity(entity).insert(SensedBodies {
             others: bodies_sensed,
+            world: is_colliding_with_world(col_rect, project, body.mask),
         });
     }
 }
@@ -295,17 +255,13 @@ fn move_bodies(
         return;
     };
 
-    let is_colliding = |entity: Entity, transform: &GlobalTransform, collision: &RectCollision| {
-        physics_world
-            .get_rect_collisions(
-                collision.rect.translate(transform.translation.truncate()),
-                entity,
-                project,
-            )
-            .is_some()
-    };
+    for (entity, mut transform, mut velocity, collision, body) in bodies.iter_mut() {
+        let is_colliding = |position: Vec2| {
+            let rect = collision.rect.translate(position);
+            physics_world.get_rect_collisions(rect, entity).is_some()
+                || is_colliding_with_world(rect, project, body.mask)
+        };
 
-    for (entity, mut transform, mut velocity, collision, _body) in bodies.iter_mut() {
         let mut to_move = (**velocity) * delta_time;
 
         if to_move.x == 0. && to_move.y == 0. {
@@ -330,10 +286,10 @@ fn move_bodies(
             transform.translation += step.extend(0.0);
             to_move -= step;
 
-            if is_colliding(entity, &*transform, collision) {
+            if is_colliding(transform.translation.truncate()) {
                 // Move one axis at a time to figure out where/how the collision happened
                 transform.translation.x = last_position.x;
-                if !is_colliding(entity, &*transform, collision) {
+                if !is_colliding(transform.translation.truncate()) {
                     // Not colliding when moved back on the X axis, the body was blocked by a wall
                     collisions |= if velocity.x > 0. {
                         CollisionSide::RIGHT
@@ -346,7 +302,7 @@ fn move_bodies(
                 } else {
                     transform.translation.x += step.x;
                     transform.translation.y = last_position.y;
-                    if !is_colliding(entity, &*transform, collision) {
+                    if !is_colliding(transform.translation.truncate()) {
                         // Not colliding when moved back on the Y axis, the body was blocked by
                         // the ground/ceiling
                         collisions |= if velocity.y > 0. {
