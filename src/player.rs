@@ -5,8 +5,8 @@ use crate::{
     follow::CameraFollow,
     input_mapper::{self, Input},
     physics::{
-        CollisionSide, KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensorBody,
-        Velocity,
+        CollisionSide, KinematicBody, KinematicCollisions, RectCollision, RectExtras, SensedBodies,
+        SensorBody, Velocity,
     },
     time::GameplayTime,
     world::{GameWorld, TILE_SIZE},
@@ -338,17 +338,17 @@ pub fn spawn_player(
             },
             ..default()
         })
-        .with_children(|_children| {
-            left_id = None; /*Some(
-                                children
-                                    .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
-                                    .id(),
-                            );*/
-            right_id = None; /*Some(
-                                 children
-                                     .spawn_bundle(PlayerSideCollisionCheckerBundle::right())
-                                     .id(),
-                             );*/
+        .with_children(|children| {
+            left_id = Some(
+                children
+                    .spawn_bundle(PlayerSideCollisionCheckerBundle::left())
+                    .id(),
+            );
+            right_id = Some(
+                children
+                    .spawn_bundle(PlayerSideCollisionCheckerBundle::right())
+                    .id(),
+            );
         })
         .insert(Player {
             left_side_sensor: left_id,
@@ -618,12 +618,29 @@ fn update_player(
     }
 }
 
-fn set_player_state(mut query: Query<(&mut Player, &KinematicCollisions)>) {
+fn set_player_state(
+    mut query: Query<(&mut Player, &KinematicCollisions)>,
+    sensors: Query<&SensedBodies, With<SensorBody>>,
+) {
     if let Ok((mut player, collisions)) = query.get_single_mut() {
         if collisions.sides.contains(CollisionSide::DOWN) {
             player.state = State::Grounded;
         } else {
-            player.state = State::Airborne;
+            if sensors.get(player.left_side_sensor.unwrap()).unwrap().world {
+                player.state = State::Sliding {
+                    side: SlideSide::Left,
+                };
+            } else if sensors
+                .get(player.right_side_sensor.unwrap())
+                .unwrap()
+                .world
+            {
+                player.state = State::Sliding {
+                    side: SlideSide::Right,
+                };
+            } else {
+                player.state = State::Airborne;
+            }
         }
     }
 }

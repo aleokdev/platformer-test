@@ -116,8 +116,8 @@ pub struct KinematicCollisions {
 /// configuration.
 #[derive(Component, Default)]
 pub struct SensedBodies {
-    others: Vec<Entity>,
-    world: bool,
+    pub others: Vec<Entity>,
+    pub world: bool,
 }
 
 const PHYSICS_TIME_STEP: f64 = 1. / 60.;
@@ -129,7 +129,7 @@ impl Plugin for PhysicsPlugin {
         app /*.init_resource::<Gravity>()*/
             .init_resource::<PhysicsWorld>()
             .add_system_set_to_stage(
-                CoreStage::PostUpdate,
+                CoreStage::PreUpdate,
                 SystemSet::new()
                     .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
                     .with_system(update_physics_world)
