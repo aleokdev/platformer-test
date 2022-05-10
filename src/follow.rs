@@ -29,7 +29,7 @@ impl Plugin for FollowPlugin {
 }
 
 fn follow(
-    mut query: Query<(&mut GlobalTransform, &OrthographicProjection, &CameraFollow)>,
+    mut query: Query<(&mut Transform, &OrthographicProjection, &CameraFollow)>,
     target_q: Query<&GlobalTransform, Without<CameraFollow>>,
 ) {
     for (mut transform, projection, follow) in query.iter_mut() {

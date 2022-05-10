@@ -242,7 +242,7 @@ fn move_bodies(
     map_assets: Res<Assets<LdtkProject>>,
     mut bodies: Query<(
         Entity,
-        &mut GlobalTransform,
+        &mut Transform,
         &mut Velocity,
         &RectCollision,
         &KinematicBody,
