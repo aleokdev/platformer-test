@@ -36,9 +36,9 @@ a walljump.
 ### Mechanics
 - [x] Simple AABB collision
 - [x] Multijump
-- [ ] Sliding down walls
-- [ ] Walljump
-- [ ] One-Way Platforms
+- [x] Sliding down walls
+- [x] Walljump
+- [x] One-Way Platforms
 - [ ] Sticking to walls
 - [ ] Gravity switching
 

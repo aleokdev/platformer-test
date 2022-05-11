@@ -4,13 +4,13 @@
 //! control over collision shapes (For tilemaps), collision sides (For player states) and didn't
 //! require many of the features it offered, such as dynamic rigidbodies or rotation.
 
-use bevy::math::{ivec2, vec2};
+use bevy::math::vec2;
 use bevy::sprite::Rect;
 use bevy::{core::FixedTimestep, prelude::*};
 use bitflags::bitflags;
 
 use crate::{
-    world::{GameWorld, LevelId, LevelTile},
+    world::{GameWorld, LevelTile},
     LdtkProject,
 };
 
@@ -67,18 +67,11 @@ impl RectExtras for Rect {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct KinematicBody {
-    mask: LevelTile,
+    pub pass_through_platforms: bool,
 }
 
-impl Default for KinematicBody {
-    fn default() -> Self {
-        Self {
-            mask: LevelTile::SOLID,
-        }
-    }
-}
 #[derive(Component, Default)]
 pub struct StaticBody;
 
@@ -86,7 +79,7 @@ pub struct StaticBody;
 
 #[derive(Component)]
 pub struct SensorBody {
-    mask: LevelTile,
+    pub mask: LevelTile,
 }
 
 impl Default for SensorBody {
@@ -159,26 +152,53 @@ impl PhysicsWorld {
     }
 }
 
-fn is_colliding_with_world(rect: Rect, project: &LdtkProject, mask: LevelTile) -> bool {
+fn world_to_tile_pos(pos: Vec2) -> (i64, i64) {
+    (pos.x.floor() as i64, pos.y.floor() as i64)
+}
+
+fn is_colliding_with_world_masked(rect: Rect, project: &LdtkProject, mask: LevelTile) -> bool {
+    tiles_to_check(rect)
+        .into_iter()
+        .any(|(x, y)| !(mask & project.get_tile(x, y)).is_empty())
+}
+
+fn is_colliding_with_world(
+    rect: Rect,
+    project: &LdtkProject,
+    original_position: Vec2,
+    collide_with_platforms: bool,
+) -> bool {
+    tiles_to_check(rect).into_iter().any(|(x, y)| {
+        let tile = project.get_tile(x, y);
+
+        match tile {
+            LevelTile::PLATFORM => {
+                // Only if the body was on top of the platform
+                let original_bottom_y = original_position.y - rect.height() + 0.5;
+                collide_with_platforms && original_bottom_y > y as f32
+            }
+
+            LevelTile::SOLID => true,
+
+            _ => false,
+        }
+    })
+}
+
+fn tiles_to_check(rect: Rect) -> Vec<(i64, i64)> {
     // FIXME: This assumes tile size ~= collider size and only checks corners
     let x = rect.min.x;
     let y = rect.min.y;
     let w = rect.width();
     let h = rect.height();
-    let tiles_to_check = [
-        round(vec2(x, y)),
-        round(vec2(x + w, y)),
-        round(vec2(x, y + h)),
-        round(vec2(x + w, y + h)),
-    ];
-
-    fn round(point: Vec2) -> IVec2 {
-        ivec2((point.x - 0.5).floor() as i32, point.y.round() as i32)
-    }
-
-    tiles_to_check
-        .into_iter()
-        .any(|pos| !(mask & project.get_tile(pos.x as i64, pos.y as i64)).is_empty())
+    // Sprites are centered, we offset by (-0.5, +0.5) to correct the position
+    // FIXME: Maybe this should be somewhere else?
+    vec![
+        world_to_tile_pos(vec2(x - 0.5, y + 0.5)),
+        world_to_tile_pos(vec2(x + w - 0.5, y + 0.5)),
+        world_to_tile_pos(vec2(x - 0.5, y + h + 0.5)),
+        world_to_tile_pos(vec2(x + w - 0.5, y + h + 0.5)),
+    ]
 }
 
 fn update_physics_world(
@@ -228,7 +248,7 @@ pub fn detect_bodies(
 
         commands.entity(entity).insert(SensedBodies {
             others: bodies_sensed,
-            world: is_colliding_with_world(col_rect, project, body.mask),
+            world: is_colliding_with_world_masked(col_rect, project, body.mask),
         });
     }
 }
@@ -256,10 +276,17 @@ fn move_bodies(
     };
 
     for (entity, mut transform, mut velocity, collision, body) in bodies.iter_mut() {
+        let original_position = transform.translation.truncate();
+
         let is_colliding = |position: Vec2| {
             let rect = collision.rect.translate(position);
             physics_world.get_rect_collisions(rect, entity).is_some()
-                || is_colliding_with_world(rect, project, body.mask)
+                || is_colliding_with_world(
+                    rect,
+                    project,
+                    original_position,
+                    !body.pass_through_platforms,
+                )
         };
 
         let mut to_move = (**velocity) * delta_time;
