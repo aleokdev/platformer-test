@@ -625,22 +625,20 @@ fn set_player_state(
     if let Ok((mut player, collisions)) = query.get_single_mut() {
         if collisions.sides.contains(CollisionSide::DOWN) {
             player.state = State::Grounded;
+        } else if sensors.get(player.left_side_sensor.unwrap()).unwrap().world {
+            player.state = State::Sliding {
+                side: SlideSide::Left,
+            };
+        } else if sensors
+            .get(player.right_side_sensor.unwrap())
+            .unwrap()
+            .world
+        {
+            player.state = State::Sliding {
+                side: SlideSide::Right,
+            };
         } else {
-            if sensors.get(player.left_side_sensor.unwrap()).unwrap().world {
-                player.state = State::Sliding {
-                    side: SlideSide::Left,
-                };
-            } else if sensors
-                .get(player.right_side_sensor.unwrap())
-                .unwrap()
-                .world
-            {
-                player.state = State::Sliding {
-                    side: SlideSide::Right,
-                };
-            } else {
-                player.state = State::Airborne;
-            }
+            player.state = State::Airborne;
         }
     }
 }

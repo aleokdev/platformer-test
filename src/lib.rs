@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 pub mod debug;
 pub mod follow;
 pub mod input_mapper;
