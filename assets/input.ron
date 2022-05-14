@@ -14,7 +14,7 @@
             secondary: Some(
                 GamepadButton((
                     Gamepad(0),
-                    Select
+                    Start
                 ))
             )
         )
@@ -27,7 +27,7 @@
             ),
             secondary: Some(GamepadAxis((
                 Gamepad(0),
-                LeftStickX
+                DPadX
             )))
         )
     }
