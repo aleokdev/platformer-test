@@ -9,6 +9,15 @@
                 ))
             )
         ),
+        Pause: (
+            primary: Key(Escape),
+            secondary: Some(
+                GamepadButton((
+                    Gamepad(0),
+                    Select
+                ))
+            )
+        )
     },
     axes: {
         Horizontal: (

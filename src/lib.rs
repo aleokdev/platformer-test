@@ -3,6 +3,7 @@
 pub mod debug;
 pub mod follow;
 pub mod input_mapper;
+mod pausing;
 pub mod physics;
 pub mod player;
 pub mod time;

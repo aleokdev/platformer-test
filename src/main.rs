@@ -48,8 +48,7 @@ pub fn main() {
         SystemSet::on_update(AppState::Loading).with_system(change_to_playing_state_on_level_load),
     )
     .add_system_set(SystemSet::on_enter(AppState::Playing).with_system(spawn_player))
-    .add_system(exit_on_window_close_system)
-    .add_system(exit_on_esc_system);
+    .add_system(exit_on_window_close_system);
 
     #[cfg(debug_assertions)]
     app.add_plugin(DebugPlugin);

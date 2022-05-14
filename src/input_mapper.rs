@@ -20,6 +20,7 @@ use crate::debug::DebugMode;
 #[non_exhaustive]
 pub enum Action {
     Jump,
+    Pause,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
@@ -215,6 +216,9 @@ impl Default for InputMappings {
                 Action::Jump => ActionBinding::new(
                         DigitalTrigger::Key(KeyCode::Space), Some(DigitalTrigger::GamepadButton(GamepadButton(Gamepad(0), GamepadButtonType::South)))
                 ),
+                Action::Pause => ActionBinding::new(
+                    DigitalTrigger::Key(KeyCode::Escape), Some(DigitalTrigger::GamepadButton(GamepadButton(Gamepad(0),GamepadButtonType::Select)))
+                )
             },
             axes: enum_map! {
                 Axis::Horizontal => AxisBinding::new(
