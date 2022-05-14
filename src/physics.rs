@@ -4,11 +4,15 @@
 //! control over collision shapes (For tilemaps), collision sides (For player states) and didn't
 //! require many of the features it offered, such as dynamic rigidbodies or rotation.
 
+use std::time::Duration;
+
 use bevy::math::vec2;
 use bevy::sprite::Rect;
 use bevy::{core::FixedTimestep, prelude::*};
 use bitflags::bitflags;
+use iyes_loopless::prelude::*;
 
+use crate::AppState;
 use crate::{
     world::{GameWorld, LevelTile},
     LdtkProject,
@@ -29,6 +33,7 @@ pub trait RectExtras: Sized {
     #[must_use]
     fn translate(self, amnt: Vec2) -> Self;
 
+    #[must_use]
     fn intersects(self, other: Rect) -> bool;
 
     #[must_use]
@@ -113,22 +118,32 @@ pub struct SensedBodies {
     pub world: bool,
 }
 
-const PHYSICS_TIME_STEP: f64 = 1. / 60.;
+const PHYSICS_TIME_STEP: Duration = Duration::from_millis(16);
 
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app /*.init_resource::<Gravity>()*/
-            .init_resource::<PhysicsWorld>()
-            .add_system_set_to_stage(
-                CoreStage::PreUpdate,
-                SystemSet::new()
-                    .with_run_criteria(FixedTimestep::step(PHYSICS_TIME_STEP))
-                    .with_system(update_physics_world)
-                    .with_system(move_bodies.after(update_physics_world))
-                    .with_system(detect_bodies.after(update_physics_world)), //.with_system(gravity),
-            );
+        app.init_resource::<PhysicsWorld>().add_stage_before(
+            CoreStage::PostUpdate,
+            "physics",
+            FixedTimestepStage::new(PHYSICS_TIME_STEP).with_stage(
+                SystemStage::parallel().with_system_set(
+                    SystemSet::new()
+                        .with_system(update_physics_world.run_in_bevy_state(AppState::Playing))
+                        .with_system(
+                            move_bodies
+                                .run_in_bevy_state(AppState::Playing)
+                                .after(update_physics_world),
+                        )
+                        .with_system(
+                            detect_bodies
+                                .run_in_bevy_state(AppState::Playing)
+                                .after(update_physics_world),
+                        ),
+                ),
+            ),
+        );
     }
 }
 
@@ -268,7 +283,7 @@ fn move_bodies(
         &KinematicBody,
     )>,
 ) {
-    let delta_time = PHYSICS_TIME_STEP as f32;
+    let delta_time = PHYSICS_TIME_STEP.as_secs_f32();
     let project = if let Some(x) = map_assets.get(&world.ldtk) {
         x
     } else {

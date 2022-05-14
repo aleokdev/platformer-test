@@ -1,6 +1,7 @@
 use bevy::{
     asset::AssetServerSettings,
     input::system::exit_on_esc_system,
+    log::{Level, LogSettings},
     prelude::*,
     window::{exit_on_window_close_system, PresentMode},
 };
@@ -10,6 +11,7 @@ use platformer_test::{
     debug::DebugPlugin,
     follow::FollowPlugin,
     input_mapper::InputBindingPlugin,
+    pausing::PausePlugin,
     physics::PhysicsPlugin,
     player::{spawn_player, PlayerPlugin},
     setup, show_fps,
@@ -24,6 +26,10 @@ pub fn main() {
     app.insert_resource(AssetServerSettings {
         watch_for_changes: true,
         ..default()
+    })
+    .insert_resource(LogSettings {
+        level: Level::INFO,
+        filter: "wgpu=error,bevy_framepace=error".to_string(),
     })
     .add_plugins(DefaultPlugins)
     .add_plugin(bevy_framepace::FramepacePlugin::default())
@@ -48,9 +54,9 @@ pub fn main() {
         SystemSet::on_update(AppState::Loading).with_system(change_to_playing_state_on_level_load),
     )
     .add_system_set(SystemSet::on_enter(AppState::Playing).with_system(spawn_player))
-    .add_system(exit_on_window_close_system);
-
-    app.add_plugin(DebugPlugin);
+    .add_system(exit_on_window_close_system)
+    .add_plugin(DebugPlugin)
+    .add_plugin(PausePlugin);
 
     app.run();
 }

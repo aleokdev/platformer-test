@@ -170,7 +170,7 @@ impl Plugin for WorldPlugin {
             .add_asset_loader(LdtkLoader)
             .add_system_to_stage(CoreStage::PreUpdate, spawn_maps)
             .add_system(process_loaded_tile_maps.after(spawn_maps))
-            .add_system(set_texture_usages);
+            .add_system(set_texture_usages.before(process_loaded_tile_maps));
     }
 }
 

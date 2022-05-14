@@ -10,7 +10,7 @@ use crate::{
     },
     time::GameplayTime,
     world::{GameWorld, TILE_SIZE},
-    LdtkProject,
+    AppState, LdtkProject,
 };
 use bevy::math::vec2;
 use bevy::{prelude::*, sprite::Rect};
@@ -21,15 +21,15 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_system_set(
-            SystemSet::new()
+            SystemSet::on_update(AppState::Playing)
                 .with_system(set_player_state.before(update_player))
                 .with_system(update_jump.before(update_player))
-                .with_system(update_player),
+                .with_system(update_player)
+                .with_system(update_camera_bounds),
         )
         .add_system(update_current_room)
         .add_system(update_room_pos)
-        .add_system(debug_player_state)
-        .add_system(update_camera_bounds);
+        .add_system(debug_player_state);
     }
 }
 
@@ -292,8 +292,13 @@ impl PlayerSideCollisionCheckerBundle {
 pub fn spawn_player(
     mut commands: Commands,
     world: Res<GameWorld>,
+    player_query: Query<(), With<Player>>,
     ldtk_maps: Res<Assets<LdtkProject>>,
 ) {
+    if !player_query.is_empty() {
+        return;
+    }
+
     let map = ldtk_maps
         .get(&world.ldtk)
         .expect("Player was spawned before project was loaded in");
