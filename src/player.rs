@@ -480,7 +480,9 @@ fn update_jump(
         return;
     };
 
-    if input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed {
+    if !input.actions[input_mapper::Action::Down].is_pressed()
+        && input.actions[input_mapper::Action::Jump] == input_mapper::ActionState::JustPressed
+    {
         player.pressed_jump = true;
         player.jump_pressed_time = gameplay_time.elapsed();
     }
@@ -490,9 +492,9 @@ fn update_player(
     time: Res<Time>,
     gameplay_time: Res<GameplayTime>,
     input: Res<Input>,
-    mut player: Query<(&mut Velocity, &mut Player)>,
+    mut player: Query<(&mut Velocity, &mut Player, &mut KinematicBody)>,
 ) {
-    let (mut velocity, mut player) = if let Ok(player) = player.get_single_mut() {
+    let (mut velocity, mut player, mut body) = if let Ok(player) = player.get_single_mut() {
         player
     } else {
         return;
@@ -502,7 +504,11 @@ fn update_player(
 
     // Obtain frame & input data
     let x_input: f32 = input.axes[input_mapper::Axis::Horizontal].value();
+    let pressing_down = input.actions[input_mapper::Action::Down].is_pressed();
     let pressing_jump = input.actions[input_mapper::Action::Jump].is_pressed();
+    body.pass_through_platforms = pressing_down && pressing_jump;
+
+    let pressing_jump = !pressing_down && pressing_jump;
 
     // Apply gravity
     velocity.y -= if pressing_jump && velocity.y > 0. {

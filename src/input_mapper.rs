@@ -21,6 +21,7 @@ use crate::debug::DebugMode;
 pub enum Action {
     Jump,
     Pause,
+    Down,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, Deserialize)]
@@ -38,7 +39,7 @@ pub enum DigitalTrigger {
 }
 
 /// Triggers that have a state defined by a value in the `-1f32..1f32` range.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub enum AnalogTrigger {
     /// Emulates a real joystick axis with two [`DigitalTrigger`]s.
     ///
@@ -118,6 +119,53 @@ impl TriggerRecord {
             // Threshold shouldn't be our problem
             _ => state,
         };
+
+        // For my gamepad at least, only the DPad axis is triggered, and not the corresponding buttons
+        // So we trigger them manually
+        if a.1 == GamepadAxisType::DPadX {
+            if val != 0.0 {
+                let trigger = DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    if val == 1.0 {
+                        GamepadButtonType::DPadRight
+                    } else {
+                        GamepadButtonType::DPadLeft
+                    },
+                ));
+                self.press(trigger);
+            } else {
+                self.release(DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    GamepadButtonType::DPadRight,
+                )));
+                self.release(DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    GamepadButtonType::DPadLeft,
+                )));
+            }
+        } else if a.1 == GamepadAxisType::DPadY {
+            if val != 0.0 {
+                let trigger = DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    if val == 1.0 {
+                        GamepadButtonType::DPadUp
+                    } else {
+                        GamepadButtonType::DPadDown
+                    },
+                ));
+                self.press(trigger);
+            } else {
+                self.release(DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    GamepadButtonType::DPadUp,
+                )));
+                self.release(DigitalTrigger::GamepadButton(GamepadButton(
+                    a.0,
+                    GamepadButtonType::DPadDown,
+                )));
+            }
+        }
+
         self.axis_values.insert(a, AxisState(val));
     }
 
@@ -218,6 +266,9 @@ impl Default for InputMappings {
                 ),
                 Action::Pause => ActionBinding::new(
                     DigitalTrigger::Key(KeyCode::Escape), Some(DigitalTrigger::GamepadButton(GamepadButton(Gamepad(0),GamepadButtonType::Select)))
+                ),
+                Action::Down => ActionBinding::new(
+                    DigitalTrigger::Key(KeyCode::Down), Some(DigitalTrigger::GamepadButton(GamepadButton(Gamepad(0),GamepadButtonType::DPadDown)))
                 )
             },
             axes: enum_map! {

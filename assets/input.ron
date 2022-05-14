@@ -17,6 +17,15 @@
                     Start
                 ))
             )
+        ),
+        Down: (
+            primary: Key(Down),
+            secondary: Some(
+                GamepadButton((
+                    Gamepad(0),
+                    DPadDown
+                ))
+            )
         )
     },
     axes: {
