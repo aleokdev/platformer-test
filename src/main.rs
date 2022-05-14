@@ -51,7 +51,6 @@ pub fn main() {
     .add_system(exit_on_window_close_system)
     .add_system(exit_on_esc_system);
 
-    #[cfg(debug_assertions)]
     app.add_plugin(DebugPlugin);
 
     app.run();
