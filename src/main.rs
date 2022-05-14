@@ -50,7 +50,6 @@ pub fn main() {
     .add_system_set(SystemSet::on_enter(AppState::Playing).with_system(spawn_player))
     .add_system(exit_on_window_close_system);
 
-    #[cfg(debug_assertions)]
     app.add_plugin(DebugPlugin);
 
     app.run();
