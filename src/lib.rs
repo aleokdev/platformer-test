@@ -29,11 +29,11 @@ pub enum AppState {
 
 pub fn camera_follow_player(
     mut commands: Commands,
-    camera_query: Query<(Entity, &Camera), Without<CameraFollow>>,
+    camera_query: Query<Entity, (With<Camera>, Without<CameraFollow>)>,
     player_query: Query<Entity, With<Player>>,
 ) {
     if let Ok(player) = player_query.get_single() {
-        for (entity, _) in camera_query.iter() {
+        for entity in camera_query.iter() {
             commands.entity(entity).insert(CameraFollow {
                 target: Some(player),
                 ..default()
